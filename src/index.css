@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: 109 74 255;
+}
+
+html, body, #root { min-height: 100%; }
+
+body {
+  @apply bg-ink-950 font-sans text-slate-200 antialiased;
+  background-image:
+    radial-gradient(1200px 500px at 70% -10%, rgb(var(--accent) / 0.12), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(var(--accent) / 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-ink-700/70 bg-ink-900/80 p-4 backdrop-blur;
+  }
+  .card-title {
+    @apply mb-3 flex items-center gap-2 text-[13px] font-semibold tracking-wide text-white;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply btn bg-accent text-white hover:brightness-110; }
+  .btn-ghost   { @apply btn border border-ink-600 bg-ink-800/60 text-slate-200 hover:bg-ink-700; }
+  .btn-danger  { @apply btn bg-red-600/90 text-white hover:bg-red-500; }
+  .btn-sm      { @apply px-2.5 py-1.5 text-xs; }
+  .input {
+    @apply w-full rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-accent focus:ring-1 focus:ring-accent;
+  }
+  .label { @apply mb-1 block text-xs font-medium text-slate-400; }
+  .tbl { @apply w-full text-left text-[12.5px]; }
+  .tbl th { @apply whitespace-nowrap px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400; }
+  .tbl td { @apply whitespace-nowrap border-t border-ink-700/50 px-2 py-2.5 text-slate-200; }
+  .badge { @apply inline-block rounded px-2 py-0.5 text-[11px] font-semibold; }
+  .badge-green { @apply badge bg-emerald-500/20 text-emerald-300; }
+  .badge-red { @apply badge bg-red-500/20 text-red-300; }
+  .badge-amber { @apply badge bg-amber-500/20 text-amber-300; }
+  .badge-accent { @apply badge bg-accent/25 text-violet-200; }
+}
+
+/* print-friendly reports */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .no-print { display: none !important; }
+  .card { background: #fff !important; border-color: #ddd !important; color: #000 !important; }
+  .tbl td, .tbl th { color: #000 !important; }
+}
