@@ -344,3 +344,43 @@ insert into public.schedules (title, day_of_week, start_time, duration_min, note
   ('Scrim',         3, '21:00', 180, 'Full custom room'),
   ('IGL Review',    5, '19:00',  90, 'VOD review'),
   ('Strategy Session', 6, '18:00', 90, 'Map rotations and drops');
+
+-- ---------------------------------------------------------------------
+-- Permissions (needed on newer Supabase projects, harmless on older ones)
+-- Row Level Security above still decides who can see / change what.
+-- ---------------------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+
+grant execute on function public.is_admin()         to anon, authenticated;
+grant execute on function public.guest_ok()         to anon, authenticated;
+grant execute on function public.guest_finance_ok() to anon, authenticated;
+
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant select on all tables in schema public to anon;
+
+revoke select on public.training_sessions from anon;
+grant select (id, held_on, name, attendees, total_players, notes) on public.training_sessions to anon;
+revoke select on public.profiles, public.submissions, public.quick_actions, public.reminder_log from anon;
+
+alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public grant execute on functions to anon, authenticated;
+-- Upcoming match schedule. Run once in Supabase -> SQL Editor.
+create table if not exists public.match_schedule (
+  id          uuid primary key default gen_random_uuid(),
+  match_date  date not null,
+  match_time  time not null default '20:00',
+  tournament  text not null,
+  stage       text,
+  map         text,
+  notes       text
+);
+
+alter table public.match_schedule enable row level security;
+
+create policy "match_schedule read members" on public.match_schedule for select to authenticated using (true);
+create policy "match_schedule read guest"   on public.match_schedule for select to anon using (public.guest_ok());
+create policy "match_schedule admin write"  on public.match_schedule for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+grant select on public.match_schedule to anon;
+grant select, insert, update, delete on public.match_schedule to authenticated;

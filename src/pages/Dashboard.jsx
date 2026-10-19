@@ -11,6 +11,7 @@ import { addDays, daysBetween, num, pctChange, timeAgo, todayStr } from '../lib/
 import { Card, Avatar, Spinner, StatusBadge } from '../components/ui'
 import { Donut, Legend, Ring } from '../components/charts'
 import { Icon } from '../lib/icons'
+import UpcomingMatches from '../components/UpcomingMatches'
 
 const PRESETS = [
   { key: '7', label: 'Last 7 days' },
@@ -373,6 +374,10 @@ export default function Dashboard() {
 
         {/* right column */}
         <div className="space-y-4">
+          <Card title="Upcoming Matches" icon={CalendarCheck} link={isMember ? '/matches' : undefined}>
+            <UpcomingMatches bare limit={4} />
+          </Card>
+
           {financeAllowed && (
             <Card title="Recent Matches" icon={Swords} link={isMember ? '/matches' : undefined}>
               <RecentMatches matches={data.matches} />
