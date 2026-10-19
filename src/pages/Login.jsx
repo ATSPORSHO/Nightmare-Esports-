@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import { ErrorBox } from '../components/ui'
+import { supabaseHost } from '../lib/supabase'
 
 export default function Login() {
   const { signIn, session, loading } = useAuth()
@@ -51,6 +52,7 @@ export default function Login() {
         <p className="mt-4 text-center text-xs text-slate-500">
           Accounts are created by your team admin. Forgot your password? Ask the admin to reset it.
         </p>
+        <p className="mt-3 text-center text-[10px] text-slate-600">Connected to: {supabaseHost || 'not connected'}</p>
         {settings.guest_enabled && (
           <p className="mt-3 text-center text-sm">
             <Link to="/" className="text-violet-300 hover:text-white">Continue as guest (dashboard only) →</Link>
