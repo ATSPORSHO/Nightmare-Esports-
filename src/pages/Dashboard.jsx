@@ -255,21 +255,27 @@ export default function Dashboard() {
 
           {/* tables row 1 */}
           <div className={`grid gap-4 ${financeAllowed ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
-            <Card title="Top Players by Total Points" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
-              <table className="tbl">
-                <thead><tr><th>#</th><th>Player Name</th><th>IGN</th><th>Kills</th><th>Total Points</th></tr></thead>
-                <tbody>
-                  {m.top.map((t, i) => (
-                    <tr key={t.p.id}>
-                      <td>{i + 1}</td>
-                      <td><span className="flex items-center gap-2"><Avatar name={t.p.full_name} url={t.p.avatar_url} size={24} />{t.p.full_name}</span></td>
-                      <td>{t.p.ign}</td><td>{t.kills}</td><td className="font-semibold text-white">{t.points}</td>
-                    </tr>
-                  ))}
-                  {!m.top.length && <tr><td colSpan={5} className="text-center text-slate-500">No player stats in this period</td></tr>}
-                </tbody>
-              </table>
-            </Card>
+          <Card title="Top Players" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
+  <table className="tbl">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>IGN</th>
+        <th>Kills</th>
+      </tr>
+    </thead>
+    <tbody>
+      {m.top.map((t, i) => (
+        <tr key={t.p.id}>
+          <td>{i + 1}</td>
+          <td>{t.p.ign}</td>
+          <td className="font-semibold text-white">{t.kills}</td>
+        </tr>
+      ))}
+      {!m.top.length && <tr><td colSpan={3} className="text-center text-slate-500">No player stats in this period</td></tr>}
+    </tbody>
+  </table>
+</Card>
 
             {financeAllowed && (
               <Card title="Recent Expenses" icon={Receipt} link={isMember ? '/finance' : undefined} className="min-w-0 overflow-x-auto">
