@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import { addDays, daysBetween, num, pctChange, timeAgo, todayStr } from '../lib/format'
-import { Card, Avatar, Spinner, StatusBadge } from '../components/ui'
+import { Card, Spinner, StatusBadge } from '../components/ui'
 import { Donut, Legend, Ring } from '../components/charts'
 import { Icon } from '../lib/icons'
 import UpcomingMatches from '../components/UpcomingMatches'
@@ -39,8 +39,8 @@ function useDashboardData(role, financeAllowed) {
         supabase.from('matches').select('*').order('played_on', { ascending: false }),
         supabase.from('match_player_stats').select('match_id, player_id, kills, points'),
         member
-          ? supabase.from('profiles').select('id, full_name, ign, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('created_at')
-          : supabase.from('public_roster').select('*'),
+          ? supabase.from('profiles').select('id, full_name, ign, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('sort_order').order('created_at')
+          : supabase.from('public_roster').select('*').order('sort_order'),
         supabase.from('training_sessions')
           .select(member ? '*' : 'id, held_on, name, attendees, total_players')
           .order('held_on', { ascending: false }),
@@ -263,7 +263,7 @@ export default function Dashboard() {
                   {m.top.map((t, i) => (
                     <tr key={t.p.id}>
                       <td>{i + 1}</td>
-                      <td><span className="flex items-center gap-2"><Avatar name={t.p.ign || t.p.full_name} url={t.p.avatar_url} size={24} /><span className="font-semibold text-white">{t.p.ign || t.p.full_name}</span></span></td>
+                      <td><span className="font-semibold text-white">{t.p.ign || t.p.full_name}</span></td>
                       <td className="text-right font-semibold text-white">{t.kills}</td>
                     </tr>
                   ))}
@@ -312,7 +312,7 @@ export default function Dashboard() {
                   {data.roster.slice(0, 5).map((p, i) => (
                     <tr key={p.id}>
                       <td>{i + 1}</td>
-                      <td><span className="flex items-center gap-2"><Avatar name={p.full_name} url={p.avatar_url} size={24} />{p.full_name}</span></td>
+                      <td>{p.full_name}</td>
                       <td>{p.ign}</td><td>{p.player_role}</td><td><StatusBadge status={p.status} /></td>
                       {isMember && <td className="text-right">{num(p.monthly_salary)}</td>}
                     </tr>

@@ -1,17 +1,19 @@
 import { Link } from 'react-router-dom'
-import { Settings } from 'lucide-react'
+import { Settings, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import { num } from '../lib/format'
-import { Avatar, Card, ErrorBox, PageHeader, Spinner, StatusBadge } from '../components/ui'
+import { movePlayer } from '../lib/roster'
+import { Card, ErrorBox, PageHeader, Spinner, StatusBadge } from '../components/ui'
 
 export default function Players() {
   const { isAdmin } = useAuth()
   const { settings } = useSettings()
-  const { data, loading, error } = useData(() =>
-    supabase.from('profiles').select('*').eq('role', 'player').order('created_at'))
+  const { data, loading, error, reload } = useData(() =>
+    supabase.from('profiles').select('*').eq('role', 'player').order('sort_order').order('created_at'))
+  const move = async (i, dir) => { await movePlayer(data, i, dir); reload() }
 
   return (
     <div>
@@ -25,20 +27,26 @@ export default function Players() {
         {loading ? <Spinner /> : (
           <table className="tbl">
             <thead>
-              <tr><th>#</th><th>Player</th><th>IGN</th><th>UID</th><th>Role</th><th>Phone</th><th>Email</th><th>Status</th><th className="text-right">Salary ({settings.currency})</th></tr>
+              <tr><th>#</th>{isAdmin && <th>Order</th>}<th>Player</th><th>IGN</th><th>UID</th><th>Role</th><th>Phone</th><th>Email</th><th>Status</th><th className="text-right">Salary ({settings.currency})</th></tr>
             </thead>
             <tbody>
               {(data || []).map((p, i) => (
                 <tr key={p.id}>
                   <td>{i + 1}</td>
-                  <td><span className="flex items-center gap-2"><Avatar name={p.full_name} url={p.avatar_url} size={26} />{p.full_name}</span></td>
+                  {isAdmin && (
+                    <td className="whitespace-nowrap">
+                      <button className="btn-ghost btn-sm mr-1" disabled={i === 0} onClick={() => move(i, -1)} title="Move up"><ArrowUp size={13} /></button>
+                      <button className="btn-ghost btn-sm" disabled={i === data.length - 1} onClick={() => move(i, 1)} title="Move down"><ArrowDown size={13} /></button>
+                    </td>
+                  )}
+                  <td>{p.full_name}</td>
                   <td className="font-semibold text-white">{p.ign}</td>
                   <td>{p.game_uid}</td><td>{p.player_role}</td><td>{p.phone}</td><td>{p.email}</td>
                   <td><StatusBadge status={p.status} /></td>
                   <td className="text-right">{num(p.monthly_salary)}</td>
                 </tr>
               ))}
-              {!data?.length && <tr><td colSpan={9} className="py-6 text-center text-slate-500">No players yet.</td></tr>}
+              {!data?.length && <tr><td colSpan={10} className="py-6 text-center text-slate-500">No players yet.</td></tr>}
             </tbody>
           </table>
         )}

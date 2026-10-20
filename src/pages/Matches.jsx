@@ -17,7 +17,7 @@ export default function Matches() {
   const [params, setParams] = useSearchParams()
   const [editing, setEditing] = useState(null) // null | {} (new) | match
   const { data, loading, error, reload } = useData(() => supabase.from('matches').select('*').order('played_on', { ascending: false }))
-  const roster = useData(() => supabase.from('profiles').select('id, full_name, ign').eq('role', 'player').order('created_at'))
+  const roster = useData(() => supabase.from('profiles').select('id, full_name, ign').eq('role', 'player').order('sort_order').order('created_at'))
 
   useEffect(() => {
     if (isAdmin && params.get('new')) { setEditing(blank()); setParams({}, { replace: true }) }

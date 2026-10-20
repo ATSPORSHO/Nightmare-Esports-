@@ -27,6 +27,7 @@ create table public.profiles (
   status         text not null default 'active' check (status in ('active','inactive','benched')),
   monthly_salary numeric not null default 0,
   avatar_url     text,
+  sort_order     int not null default 9999,    -- roster order set by admin
   created_at     timestamptz not null default now()
 );
 
@@ -233,7 +234,7 @@ create trigger log_profiles  after insert on public.profiles          for each r
 -- Guest-safe roster view (no phone / e-mail / salary / UID)
 -- ---------------------------------------------------------------------
 create or replace view public.public_roster with (security_invoker = false) as
-  select id, full_name, ign, player_role, status, avatar_url
+  select id, full_name, ign, player_role, status, avatar_url, sort_order
   from public.profiles
   where role = 'player' and (public.guest_ok() or auth.uid() is not null);
 grant select on public.public_roster to anon, authenticated;

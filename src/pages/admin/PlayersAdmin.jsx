@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { UserPlus, Pencil, KeyRound, Trash2, Copy } from 'lucide-react'
+import { UserPlus, Pencil, KeyRound, Trash2, Copy, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { useSettings } from '../../context/SettingsContext'
 import { PLAYER_ROLES } from '../../lib/constants'
 import { num } from '../../lib/format'
-import { Avatar, Card, ErrorBox, Field, Modal, Notice, Spinner, StatusBadge } from '../../components/ui'
+import { movePlayer } from '../../lib/roster'
+import { Card, ErrorBox, Field, Modal, Notice, Spinner, StatusBadge } from '../../components/ui'
 
 async function callFn(body) {
   const { data, error } = await supabase.functions.invoke('create-player', { body })
@@ -25,7 +26,7 @@ const randomPassword = () => {
 
 export default function PlayersAdmin() {
   const { settings } = useSettings()
-  const { data, loading, error, reload } = useData(() => supabase.from('profiles').select('*').order('created_at'))
+  const { data, loading, error, reload } = useData(() => supabase.from('profiles').select('*').order('role').order('sort_order').order('created_at'))
   const [modal, setModal] = useState(null) // { type: 'create' | 'edit' | 'password', player? }
   const [created, setCreated] = useState(null)
 
@@ -59,11 +60,20 @@ export default function PlayersAdmin() {
       <Card className="overflow-x-auto">
         {loading ? <Spinner /> : (
           <table className="tbl">
-            <thead><tr><th>Player</th><th>IGN</th><th>UID</th><th>Role</th><th>Phone</th><th>Email</th><th>Status</th><th className="text-right">Salary</th><th>Access</th><th /></tr></thead>
+            <thead><tr><th>Order</th><th>Player</th><th>IGN</th><th>UID</th><th>Role</th><th>Phone</th><th>Email</th><th>Status</th><th className="text-right">Salary</th><th>Access</th><th /></tr></thead>
             <tbody>
               {(data || []).map((p) => (
                 <tr key={p.id}>
-                  <td><span className="flex items-center gap-2"><Avatar name={p.full_name} url={p.avatar_url} size={24} />{p.full_name}</span></td>
+                  <td className="whitespace-nowrap">
+                    {p.role === 'player' && (() => {
+                      const pl = data.filter((x) => x.role === 'player'); const i = pl.findIndex((x) => x.id === p.id)
+                      return (<>
+                        <button className="btn-ghost btn-sm mr-1" disabled={i === 0} onClick={async () => { await movePlayer(pl, i, -1); reload() }} title="Move up"><ArrowUp size={13} /></button>
+                        <button className="btn-ghost btn-sm" disabled={i === pl.length - 1} onClick={async () => { await movePlayer(pl, i, 1); reload() }} title="Move down"><ArrowDown size={13} /></button>
+                      </>)
+                    })()}
+                  </td>
+                  <td>{p.full_name}</td>
                   <td>{p.ign}</td><td>{p.game_uid}</td><td>{p.player_role}</td><td>{p.phone}</td><td>{p.email}</td>
                   <td><StatusBadge status={p.status} /></td><td className="text-right">{num(p.monthly_salary)}</td>
                   <td><span className={p.role === 'admin' ? 'badge-accent' : 'badge-green'}>{p.role}</span></td>
@@ -74,7 +84,7 @@ export default function PlayersAdmin() {
                   </td>
                 </tr>
               ))}
-              {!data?.length && <tr><td colSpan={10} className="py-6 text-center text-slate-500">No accounts yet.</td></tr>}
+              {!data?.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">No accounts yet.</td></tr>}
             </tbody>
           </table>
         )}

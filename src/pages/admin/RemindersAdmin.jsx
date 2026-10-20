@@ -57,7 +57,7 @@ export default function RemindersAdmin() {
 
 function SendNow() {
   const schedules = useData(() => supabase.from('schedules').select('*').eq('active', true).order('day_of_week').order('start_time'))
-  const players = useData(() => supabase.from('profiles').select('id, full_name, ign, email, status').eq('role', 'player').order('created_at'))
+  const players = useData(() => supabase.from('profiles').select('id, full_name, ign, email, status').eq('role', 'player').order('sort_order').order('created_at'))
   const [title, setTitle] = useState('Training')
   const [when, setWhen] = useState('')
   const [scheduleId, setScheduleId] = useState('')
