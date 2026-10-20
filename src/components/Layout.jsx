@@ -65,11 +65,11 @@ export default function Layout() {
             {settings.logo_url
               ? <img src={settings.logo_url} alt="" className="h-11 w-11 rounded-lg object-contain" />
               : <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent/30 font-display text-xl font-bold text-white">{settings.team_name[0]}</span>}
-            <span className="font-display text-2xl font-bold italic tracking-wide text-white">{settings.team_name}</span>
+            <span className="font-display text-lg font-extrabold uppercase tracking-[0.14em] text-white">{settings.team_name}</span>
           </Link>
           <div className="mx-4 hidden border-l border-ink-600 pl-4 md:block">
-            <div className="font-display text-lg font-bold leading-tight text-white">{settings.app_title}</div>
-            <div className="text-xs text-slate-300">{settings.app_subtitle}</div>
+            <div className="font-display text-sm font-bold uppercase leading-tight tracking-[0.08em] text-white">{settings.app_title}</div>
+            <div className="mt-0.5 text-[11px] tracking-wide text-slate-400">{settings.app_subtitle}</div>
           </div>
 
           <div className="ml-auto flex items-center gap-3">

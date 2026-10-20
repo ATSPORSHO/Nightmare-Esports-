@@ -17,7 +17,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['Rajdhani', 'Inter', 'sans-serif'],
+        display: ['Montserrat', 'Inter', 'sans-serif'],
       },
     },
   },
