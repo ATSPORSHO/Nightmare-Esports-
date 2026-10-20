@@ -130,10 +130,10 @@ export default function Dashboard() {
       agg[s.player_id].kills += s.kills
       agg[s.player_id].points += s.points
     })
-    const top = Object.entries(agg)
-      .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
-      .filter((x) => x.p)
-      .sort((a, b) => b.points - a.points).slice(0, 5)
+   const top = Object.entries(agg)
+  .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
+  .filter((x) => x.p)
+  .sort((a, b) => b.kills - a.kills || b.points - a.points).slice(0, 5)
 
     // training
     const sessions = data.training.filter((x) => inR(x.held_on))
