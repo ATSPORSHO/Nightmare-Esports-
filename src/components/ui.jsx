@@ -1,4 +1,5 @@
 import { X, Loader2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 
 export function Spinner({ className = '' }) {
@@ -20,8 +21,9 @@ export function Notice({ children }) {
 }
 
 export function Modal({ title, onClose, children, wide = false }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+  // rendered on <body> so it always covers the whole screen (not just the card it was opened from)
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
       <div
         className={`my-8 w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} rounded-2xl border border-ink-600 bg-ink-900 p-5 shadow-2xl`}
         onMouseDown={(e) => e.stopPropagation()}
@@ -32,7 +34,8 @@ export function Modal({ title, onClose, children, wide = false }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
