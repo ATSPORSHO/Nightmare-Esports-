@@ -137,7 +137,7 @@ export default function Reports() {
 
       {loading || !data || !t ? <Spinner /> : view === 'team' ? (
         /* ===================== ONE-PAGE TEAM PERFORMANCE REPORT ===================== */
-        <div className="report-sheet overflow-hidden rounded-xl border border-ink-600 bg-ink-950">
+        <div className="report-sheet team-sheet overflow-hidden rounded-xl border border-ink-600 bg-ink-950">
           <div className="h-2 bg-accent" />
           <div className="p-6 sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -198,8 +198,8 @@ export default function Reports() {
               <div className={`grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
                 <span>Date</span><span>Tournament</span><span>Map</span><span>Placement</span><span>Kills</span><span>Points</span>
               </div>
-              {t.matchRows.slice(0, 12).map((m) => (
-                <div key={m.id} className="grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
+              {t.matchRows.slice(0, 12).map((m, i) => (
+                <div key={m.id} className={`${i >= 10 ? 'print-hide ' : ''}grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0`}>
                   <span className="text-slate-400">{m.played_on}</span>
                   <span className="truncate font-medium text-white">{m.tournament}</span>
                   <span>{m.map || '—'}</span>
@@ -211,7 +211,7 @@ export default function Reports() {
               {!t.matchRows.length && <div className="px-3 py-4 text-center text-slate-500">No matches recorded in this period.</div>}
             </div>
             {t.matchRows.length > 12 && (
-              <p className="mt-2 text-[11px] text-slate-500">Showing the latest 12 of {t.matchRows.length} matches. The Detailed report lists all of them.</p>
+              <p className="mt-2 text-[11px] text-slate-500">Showing the latest {Math.min(12, t.matchRows.length)} of {t.matchRows.length} matches (10 on the printed page). The Detailed report lists all of them.</p>
             )}
             </div>}
             <p className="mt-3 text-[10px] text-slate-500">

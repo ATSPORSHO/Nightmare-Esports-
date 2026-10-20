@@ -56,6 +56,12 @@ body {
 .report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
   @page { size: A4 landscape; margin: 6mm; }
+  html, body, #root, .min-h-screen { height: auto !important; min-height: 0 !important; }
   main { padding: 0 !important; }
+  /* Team report: always ONE landscape A4 page */
+  .team-sheet { zoom: 0.68; break-inside: avoid; page-break-inside: avoid; page-break-after: avoid; }
+  .team-sheet .p-6 { padding: 14px !important; }
+  .team-sheet .mt-8 { margin-top: 14px !important; }
+  .team-sheet .print-hide { display: none !important; }
   .report-sheet { background: #070405 !important; color: #e5e7eb !important; border: 0 !important; }
 }
