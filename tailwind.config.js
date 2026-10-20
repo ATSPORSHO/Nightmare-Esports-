@@ -7,12 +7,12 @@ export default {
         // Accent colour is controlled from the Admin Panel (stored as "r g b" in --accent)
         accent: 'rgb(var(--accent) / <alpha-value>)',
         ink: {
-          950: '#060a1c',
-          900: '#0a1030',
-          850: '#0d1438',
-          800: '#111a45',
-          700: '#1b2558',
-          600: '#27336f',
+          950: '#070405',
+          900: '#0e0809',
+          850: '#140b0c',
+          800: '#1c0e10',
+          700: '#2a1214',
+          600: '#431c20',
         },
       },
       fontFamily: {

@@ -43,7 +43,7 @@ export default function UpcomingMatches({ editable = false, limit = 5, bare = fa
           {rows.map((m) => (
             <li key={m.id} className={`flex flex-wrap items-center gap-3 py-2.5 ${m.match_date < today ? 'opacity-50' : ''}`}>
               <div className="w-[84px] shrink-0">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-red-300">
                   {m.match_date === today ? 'Today' : fmtDate(m.match_date)}
                 </div>
                 <div className="font-display text-xl font-bold leading-tight text-white">{String(m.match_time).slice(0, 5)}</div>

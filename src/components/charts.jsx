@@ -2,7 +2,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { CATEGORY_COLORS } from '../lib/constants'
 import { num } from '../lib/format'
 
-const FALLBACK = ['#6d4aff', '#2fb4f6', '#22c58b', '#b39bff', '#f5a524', '#38c2c7', '#f472b6', '#facc15']
+const FALLBACK = ['#c8102e', '#f59e0b', '#22c58b', '#fb7185', '#f5a524', '#38c2c7', '#f472b6', '#facc15']
 export const colorFor = (name, i) => CATEGORY_COLORS[name] || FALLBACK[i % FALLBACK.length]
 
 /** Donut with the total in the middle. items = [{ name, value }] */
@@ -13,7 +13,7 @@ export function Donut({ items, center, sub, size = 170, inner = 0.62 }) {
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie data={data} dataKey="value" innerRadius={`${inner * 100}%`} outerRadius="100%" stroke="none" paddingAngle={items.length > 1 ? 2 : 0}>
-            {data.map((d, i) => <Cell key={d.name} fill={items.length ? colorFor(d.name, i) : '#1b2558'} />)}
+            {data.map((d, i) => <Cell key={d.name} fill={items.length ? colorFor(d.name, i) : '#2a1214'} />)}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
@@ -49,7 +49,7 @@ export function Ring({ value, size = 96 }) {
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg viewBox="0 0 100 100" className="-rotate-90">
-        <circle cx="50" cy="50" r={r} fill="none" stroke="#1b2558" strokeWidth="9" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#2a1214" strokeWidth="9" />
         <circle
           cx="50" cy="50" r={r} fill="none" stroke="#22c58b" strokeWidth="9" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c - (c * Math.min(100, value)) / 100}

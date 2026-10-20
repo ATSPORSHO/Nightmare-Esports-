@@ -5,10 +5,10 @@ export const MAPS = ['Erangel', 'Miramar', 'Sanhok', 'Vikendi', 'Rondo', 'Livik'
 
 // Chart colours for expense categories
 export const CATEGORY_COLORS = {
-  Salaries: '#6d4aff',
-  'Tournament Fees': '#2fb4f6',
+  Salaries: '#c8102e',
+  'Tournament Fees': '#f59e0b',
   'Travel & Logistics': '#22c58b',
-  Equipment: '#b39bff',
+  Equipment: '#fb7185',
   Training: '#f5a524',
   Others: '#38c2c7',
 }

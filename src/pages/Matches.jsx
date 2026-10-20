@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { MAPS } from '../lib/constants'
 import { todayStr } from '../lib/format'
 import { Card, ErrorBox, Field, Modal, PageHeader, Spinner } from '../components/ui'
+import UpcomingMatches from '../components/UpcomingMatches'
 
 const blank = () => ({ played_on: todayStr(), tournament: '', map: 'Erangel', placement: '', points: 0, kills: 0, notes: '' })
 
@@ -34,6 +35,7 @@ export default function Matches() {
         subtitle="Tournament and scrim results."
         actions={isAdmin && <button className="btn-primary" onClick={() => setEditing(blank())}><Plus size={16} /> Add match</button>}
       />
+      <UpcomingMatches editable={isAdmin} />
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-x-auto">
         {loading ? <Spinner /> : (

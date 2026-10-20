@@ -83,7 +83,7 @@ export default function QuickActionsAdmin() {
 }
 
 function Form({ row, count, onClose, onSaved }) {
-  const [f, setF] = useState({ label: '', icon: 'Zap', color: '#6d4aff', target: TARGETS[0].value, roles: ['admin'], enabled: true, ...row })
+  const [f, setF] = useState({ label: '', icon: 'Zap', color: '#c8102e', target: TARGETS[0].value, roles: ['admin'], enabled: true, ...row })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })

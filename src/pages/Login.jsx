@@ -55,7 +55,7 @@ export default function Login() {
         <p className="mt-3 text-center text-[10px] text-slate-600">Connected to: {supabaseHost || 'not connected'}</p>
         {settings.guest_enabled && (
           <p className="mt-3 text-center text-sm">
-            <Link to="/" className="text-violet-300 hover:text-white">Continue as guest (dashboard only) →</Link>
+            <Link to="/" className="text-red-300 hover:text-white">Continue as guest (dashboard only) →</Link>
           </p>
         )}
       </form>

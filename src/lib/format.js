@@ -13,7 +13,7 @@ export const daysBetween = (a, b) =>
 
 export function hexToRgbTriplet(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '')
-  if (!m) return '109 74 255'
+  if (!m) return '200 16 46'
   const n = parseInt(m[1], 16)
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
 }

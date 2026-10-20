@@ -13,7 +13,7 @@ const DEFAULTS = {
   logo_url: null,
   game_logo_url: null,
   banner_url: null,
-  accent_color: '#6d4aff',
+  accent_color: '#c8102e',
   footer_text: 'All rights reserved.',
   quote_text: '',
   quote_author: '',

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --accent: 109 74 255;
+  --accent: 200 16 46;
 }
 
 html, body, #root { min-height: 100%; }
@@ -41,7 +41,7 @@ body {
   .badge-green { @apply badge bg-emerald-500/20 text-emerald-300; }
   .badge-red { @apply badge bg-red-500/20 text-red-300; }
   .badge-amber { @apply badge bg-amber-500/20 text-amber-300; }
-  .badge-accent { @apply badge bg-accent/25 text-violet-200; }
+  .badge-accent { @apply badge bg-accent/25 text-red-200; }
 }
 
 /* print-friendly reports */
@@ -50,4 +50,11 @@ body {
   .no-print { display: none !important; }
   .card { background: #fff !important; border-color: #ddd !important; color: #000 !important; }
   .tbl td, .tbl th { color: #000 !important; }
+}
+
+/* One-page team report keeps its blood-red / black look on paper */
+.report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media print {
+  @page { size: A4 landscape; margin: 6mm; }
+  .report-sheet { background: #070405 !important; color: #e5e7eb !important; border: 0 !important; }
 }

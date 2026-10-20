@@ -44,7 +44,7 @@ export default function Training() {
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {(schedule.data || []).map((s) => (
               <div key={s.id} className="rounded-lg border border-ink-700 bg-ink-850 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">{DAYS[s.day_of_week]}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-red-300">{DAYS[s.day_of_week]}</div>
                 <div className="font-semibold text-white">{s.title}</div>
                 <div className="text-sm text-slate-300">{String(s.start_time).slice(0, 5)} · {s.duration_min} min</div>
                 {s.notes && <div className="mt-1 text-xs text-slate-500">{s.notes}</div>}
@@ -53,7 +53,7 @@ export default function Training() {
             {!schedule.data?.length && <div className="text-sm text-slate-500">No schedule set yet.</div>}
           </div>
         )}
-        {isAdmin && <Link to="/admin?tab=schedules" className="mt-3 inline-block text-xs text-violet-300 hover:text-white">Edit schedule in Admin Panel →</Link>}
+        {isAdmin && <Link to="/admin?tab=schedules" className="mt-3 inline-block text-xs text-red-300 hover:text-white">Edit schedule in Admin Panel →</Link>}
       </Card>
 
       <ErrorBox>{sessions.error}</ErrorBox>

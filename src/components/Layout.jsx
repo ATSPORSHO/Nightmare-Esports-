@@ -53,7 +53,7 @@ export default function Layout() {
       <header
         className="relative border-b border-ink-700/80 bg-ink-900/90"
         style={settings.banner_url ? {
-          backgroundImage: `linear-gradient(90deg, rgba(6,10,28,.95) 0%, rgba(6,10,28,.55) 50%, rgba(6,10,28,.95) 100%), url(${settings.banner_url})`,
+          backgroundImage: `linear-gradient(90deg, rgba(7,4,5,.95) 0%, rgba(7,4,5,.55) 50%, rgba(7,4,5,.95) 100%), url(${settings.banner_url})`,
           backgroundSize: 'cover', backgroundPosition: 'center',
         } : undefined}
       >

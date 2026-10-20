@@ -11,6 +11,7 @@ import { addDays, daysBetween, num, pctChange, timeAgo, todayStr } from '../lib/
 import { Card, Avatar, Spinner, StatusBadge } from '../components/ui'
 import { Donut, Legend, Ring } from '../components/charts'
 import { Icon } from '../lib/icons'
+import UpcomingMatches from '../components/UpcomingMatches'
 
 const PRESETS = [
   { key: '7', label: 'Last 7 days' },
@@ -130,10 +131,10 @@ export default function Dashboard() {
       agg[s.player_id].kills += s.kills
       agg[s.player_id].points += s.points
     })
-   const top = Object.entries(agg)
-  .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
-  .filter((x) => x.p)
-  .sort((a, b) => b.kills - a.kills || b.points - a.points).slice(0, 5)
+    const top = Object.entries(agg)
+      .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
+      .filter((x) => x.p)
+      .sort((a, b) => b.kills - a.kills || b.points - a.points).slice(0, 5)
 
     // training
     const sessions = data.training.filter((x) => inR(x.held_on))
@@ -197,10 +198,10 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-4">
           {/* stat cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5">
-            <StatCard icon={Swords} color="#6d8bff" label="Total Matches" value={num(m.matches.length)} change={m.change.matches} />
-            <StatCard icon={Crosshair} color="#38bdf8" label="Total Kills" value={num(m.kills)} change={m.change.kills} />
+            <StatCard icon={Swords} color="#ff5a67" label="Total Matches" value={num(m.matches.length)} change={m.change.matches} />
+            <StatCard icon={Crosshair} color="#ff7a45" label="Total Kills" value={num(m.kills)} change={m.change.kills} />
             <StatCard icon={Trophy} color="#f5a524" label="Total Points" value={num(m.points)} change={m.change.points} />
-            {financeAllowed && <StatCard icon={Wallet} color="#8b7bff" label={`Total Income (${cur})`} value={num(m.totalIncome)} change={m.change.income} />}
+            {financeAllowed && <StatCard icon={Wallet} color="#ff5a67" label={`Total Income (${cur})`} value={num(m.totalIncome)} change={m.change.income} />}
             {financeAllowed && <StatCard icon={PiggyBank} color="#f472b6" label={`Net Balance (${cur})`} value={num(net)} change={m.change.net} />}
           </div>
 
@@ -212,13 +213,13 @@ export default function Dashboard() {
                   <BarChart data={m.weeks} margin={{ top: 18, right: 4, left: -22, bottom: 0 }}>
                     <defs>
                       <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7c5cff" /><stop offset="100%" stopColor="#4326d9" />
+                        <stop offset="0%" stopColor="#e11d2e" /><stop offset="100%" stopColor="#7f0d1a" />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#1b2558" vertical={false} />
+                    <CartesianGrid stroke="#2a1214" vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} contentStyle={{ background: '#0a1030', border: '1px solid #27336f', borderRadius: 8 }} />
+                    <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} contentStyle={{ background: '#0d0808', border: '1px solid #431c20', borderRadius: 8 }} />
                     <Bar dataKey="points" fill="url(#bar)" radius={[3, 3, 0, 0]} maxBarSize={34}>
                       <LabelList dataKey="points" position="top" fill="#cbd5e1" fontSize={11} />
                     </Bar>
@@ -255,27 +256,21 @@ export default function Dashboard() {
 
           {/* tables row 1 */}
           <div className={`grid gap-4 ${financeAllowed ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
-          <Card title="Top Players" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
-  <table className="tbl">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>IGN</th>
-        <th>Kills</th>
-      </tr>
-    </thead>
-    <tbody>
-      {m.top.map((t, i) => (
-        <tr key={t.p.id}>
-          <td>{i + 1}</td>
-          <td>{t.p.ign}</td>
-          <td className="font-semibold text-white">{t.kills}</td>
-        </tr>
-      ))}
-      {!m.top.length && <tr><td colSpan={3} className="text-center text-slate-500">No player stats in this period</td></tr>}
-    </tbody>
-  </table>
-</Card>
+            <Card title="Top Players by Kills" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
+              <table className="tbl">
+                <thead><tr><th>#</th><th>IGN</th><th className="text-right">Kills</th></tr></thead>
+                <tbody>
+                  {m.top.map((t, i) => (
+                    <tr key={t.p.id}>
+                      <td>{i + 1}</td>
+                      <td><span className="flex items-center gap-2"><Avatar name={t.p.ign || t.p.full_name} url={t.p.avatar_url} size={24} /><span className="font-semibold text-white">{t.p.ign || t.p.full_name}</span></span></td>
+                      <td className="text-right font-semibold text-white">{t.kills}</td>
+                    </tr>
+                  ))}
+                  {!m.top.length && <tr><td colSpan={3} className="text-center text-slate-500">No player stats in this period</td></tr>}
+                </tbody>
+              </table>
+            </Card>
 
             {financeAllowed && (
               <Card title="Recent Expenses" icon={Receipt} link={isMember ? '/finance' : undefined} className="min-w-0 overflow-x-auto">
@@ -360,12 +355,12 @@ export default function Dashboard() {
                     <AreaChart data={m.trend} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                       <defs>
                         <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#7c5cff" stopOpacity={0.5} /><stop offset="100%" stopColor="#7c5cff" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#e11d2e" stopOpacity={0.5} /><stop offset="100%" stopColor="#e11d2e" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="d" hide />
-                      <Tooltip contentStyle={{ background: '#0a1030', border: '1px solid #27336f', borderRadius: 8, fontSize: 12 }} />
-                      <Area type="monotone" dataKey="net" stroke="#8b7bff" strokeWidth={2} fill="url(#area)" />
+                      <Tooltip contentStyle={{ background: '#0d0808', border: '1px solid #431c20', borderRadius: 8, fontSize: 12 }} />
+                      <Area type="monotone" dataKey="net" stroke="#ff5a67" strokeWidth={2} fill="url(#area)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -379,6 +374,10 @@ export default function Dashboard() {
 
         {/* right column */}
         <div className="space-y-4">
+          <Card title="Upcoming Matches" icon={CalendarCheck} link={isMember ? '/matches' : undefined}>
+            <UpcomingMatches bare limit={4} />
+          </Card>
+
           {financeAllowed && (
             <Card title="Recent Matches" icon={Swords} link={isMember ? '/matches' : undefined}>
               <RecentMatches matches={data.matches} />
@@ -411,7 +410,7 @@ export default function Dashboard() {
               {settings.logo_url ? <img src={settings.logo_url} alt="" className="h-14 w-14 object-contain" /> : <Quote className="text-accent" />}
               <div>
                 <div className="text-sm font-medium text-white">{settings.quote_text}</div>
-                {settings.quote_author && <div className="mt-1 text-xs text-violet-300">– {settings.quote_author}</div>}
+                {settings.quote_author && <div className="mt-1 text-xs text-red-300">– {settings.quote_author}</div>}
               </div>
             </div>
           )}

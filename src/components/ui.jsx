@@ -55,7 +55,7 @@ export function Card({ title, icon: Icon, link, linkLabel = 'View All', children
             {Icon && <Icon size={16} className="text-accent" />}
             {title}
           </span>
-          {link && <Link to={link} className="text-[11px] font-medium text-violet-300 hover:text-white">{linkLabel} →</Link>}
+          {link && <Link to={link} className="text-[11px] font-medium text-red-300 hover:text-white">{linkLabel} →</Link>}
         </div>
       )}
       {children}
@@ -82,7 +82,7 @@ export function Avatar({ name, url, size = 28 }) {
   ) : (
     <span
       style={{ width: size, height: size, fontSize: size * 0.4 }}
-      className="inline-flex items-center justify-center rounded-full border border-accent/60 bg-accent/20 font-bold text-violet-100"
+      className="inline-flex items-center justify-center rounded-full border border-accent/60 bg-accent/20 font-bold text-red-100"
     >
       {ini}
     </span>

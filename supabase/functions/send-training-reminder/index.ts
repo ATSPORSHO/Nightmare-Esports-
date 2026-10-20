@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0a1030;color:#e5e7ff;border-radius:14px;padding:28px">
   <h2 style="margin:0 0 6px;color:#fff">${esc(settings.team_name)}</h2>
   <p style="margin:0 0 18px;color:#9aa4d6;font-size:13px">Training reminder</p>
-  <p style="font-size:15px;line-height:1.6">${esc(message)}</p>
+  <p style="font-size:15px;line-height:1.6">${esc(message).replace(/\n/g, "<br>")}</p>
   <p style="text-align:center;margin:28px 0">
     <a href="${button}" style="background:${esc(settings.accent_color)};color:#fff;text-decoration:none;font-weight:bold;padding:14px 26px;border-radius:10px;display:inline-block">
       Add Training Screenshot
