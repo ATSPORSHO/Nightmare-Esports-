@@ -8,8 +8,9 @@ import { MAPS } from '../lib/constants'
 import { todayStr } from '../lib/format'
 import { Card, ErrorBox, Field, Modal, PageHeader, Spinner } from '../components/ui'
 import UpcomingMatches from '../components/UpcomingMatches'
+import { matchPoints, placementPoints } from '../lib/points'
 
-const blank = () => ({ played_on: todayStr(), tournament: '', map: 'Erangel', placement: '', points: 0, kills: 0, notes: '' })
+const blank = () => ({ played_on: todayStr(), tournament: '', map: 'Erangel', placement: '', kills: 0, notes: '' })
 
 export default function Matches() {
   const { isAdmin } = useAuth()
@@ -76,19 +77,28 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     if (!match.id) return
     supabase.from('match_player_stats').select('*').eq('match_id', match.id).then(({ data }) => {
       const s = {}
-      ;(data || []).forEach((r) => { s[r.player_id] = { kills: r.kills, points: r.points } })
+      ;(data || []).forEach((r) => { s[r.player_id] = { kills: r.kills } })
       setStats(s)
     })
   }, [match.id])
 
-  const setStat = (id, k, v) => setStats({ ...stats, [id]: { kills: 0, points: 0, ...stats[id], [k]: v } })
+  // players' kills add up to the team's kills automatically
+  const setPlayerKills = (id, v) => {
+    const next = { ...stats, [id]: { ...stats[id], kills: v } }
+    setStats(next)
+    setF((cur) => ({ ...cur, kills: Object.values(next).reduce((t, x) => t + (Number(x.kills) || 0), 0) }))
+  }
+
+  // points are calculated: placement points + 1 per kill
+  const placePts = placementPoints(f.placement)
+  const totalPts = matchPoints(f.placement, f.kills)
 
   const save = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
     const row = {
       played_on: f.played_on, tournament: f.tournament, map: f.map, notes: f.notes || null,
-      placement: f.placement === '' ? null : Number(f.placement), points: Number(f.points) || 0, kills: Number(f.kills) || 0,
+      placement: f.placement === '' ? null : Number(f.placement), points: totalPts, kills: Number(f.kills) || 0,
     }
     let id = match.id
     let res
@@ -99,8 +109,8 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     // replace per-player stats
     await supabase.from('match_player_stats').delete().eq('match_id', id)
     const rows = Object.entries(stats)
-      .map(([player_id, v]) => ({ match_id: id, player_id, kills: Number(v.kills) || 0, points: Number(v.points) || 0 }))
-      .filter((r) => r.kills || r.points)
+      .map(([player_id, v]) => ({ match_id: id, player_id, kills: Number(v.kills) || 0, points: Number(v.kills) || 0 }))
+      .filter((r) => r.kills)
     if (rows.length) {
       const r2 = await supabase.from('match_player_stats').insert(rows)
       if (r2.error) { setErr(r2.error.message); setBusy(false); return }
@@ -117,21 +127,28 @@ function MatchForm({ match, roster, onClose, onSaved }) {
           <Field label="Map">
             <select className="input" value={f.map || ''} onChange={set('map')}>{MAPS.map((m) => <option key={m}>{m}</option>)}</select>
           </Field>
-          <Field label="Placement"><input className="input" type="number" min="1" value={f.placement ?? ''} onChange={set('placement')} /></Field>
+          <Field label="Placement (1st, 2nd, ...)"><input className="input" type="number" min="1" max="100" value={f.placement ?? ''} onChange={set('placement')} /></Field>
           <Field label="Team kills"><input className="input" type="number" min="0" value={f.kills} onChange={set('kills')} /></Field>
-          <Field label="Team points"><input className="input" type="number" min="0" value={f.points} onChange={set('points')} /></Field>
+          <Field label="Team points (automatic)">
+            <div className="input flex items-center justify-between !bg-ink-800 font-display text-xl font-bold text-white">
+              <span>{totalPts}</span>
+              <span className="text-[11px] font-normal text-slate-400">{placePts} placement + {Number(f.kills) || 0} kills</span>
+            </div>
+          </Field>
         </div>
+        <p className="text-[11px] text-slate-500">
+          Points: 1st = 10 · 2nd = 6 · 3rd = 5 · 4th = 4 · 5th = 3 · 6th = 2 · 7th–8th = 1 · 9th–25th = 0 · plus 1 point per kill.
+        </p>
         <Field label="Notes"><input className="input" value={f.notes || ''} onChange={set('notes')} /></Field>
 
         {roster.length > 0 && (
           <div>
-            <div className="label">Per-player stats (feeds “Top Players”)</div>
+            <div className="label">Player kills (add up to team kills · feeds “Top Players”)</div>
             <div className="space-y-1.5 rounded-lg border border-ink-700 p-2">
               {roster.map((p) => (
-                <div key={p.id} className="grid grid-cols-[1fr_90px_90px] items-center gap-2 text-sm">
+                <div key={p.id} className="grid grid-cols-[1fr_110px] items-center gap-2 text-sm">
                   <span>{p.ign || p.full_name}</span>
-                  <input className="input !py-1" type="number" min="0" placeholder="Kills" value={stats[p.id]?.kills ?? ''} onChange={(e) => setStat(p.id, 'kills', e.target.value)} />
-                  <input className="input !py-1" type="number" min="0" placeholder="Points" value={stats[p.id]?.points ?? ''} onChange={(e) => setStat(p.id, 'points', e.target.value)} />
+                  <input className="input !py-1" type="number" min="0" placeholder="Kills" value={stats[p.id]?.kills ?? ''} onChange={(e) => setPlayerKills(p.id, e.target.value)} />
                 </div>
               ))}
             </div>
