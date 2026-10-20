@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Download, Printer } from 'lucide-react'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useSettings } from '../context/SettingsContext'
@@ -38,6 +40,7 @@ export default function Reports() {
 
   const topPlayers = (() => {
     if (!data) return []
+
     const agg = {}
 
     data.stats.forEach((s) => {
@@ -84,6 +87,122 @@ export default function Reports() {
     download(`expenses_${from}_${to}.csv`, toCsv(data.expenses))
     download(`income_${from}_${to}.csv`, toCsv(data.income))
     download(`training_${from}_${to}.csv`, toCsv(data.training))
+  }
+
+  const generateReportPdf = () => {
+    if (!data) return
+
+    const doc = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    doc.setFillColor(90, 0, 0)
+    doc.rect(0, 0, pageWidth, 26, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.text(settings.team_name || 'Nightmare Esports Organization', 14, 17)
+
+    doc.setTextColor(0, 0, 0)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Report Period: ${from} to ${to}`, 14, 36)
+
+    const summaryRows = [
+      ['Matches Played', String(totalMatches)],
+      ['Total Points', String(num(totalPoints))],
+      ['Average Points / Match', String(num(averagePointsPerMatch))],
+      ['Training Attendance Rate', `${num(attendanceRate)}%`],
+      ['Income', `${num(sum(data.income, 'amount'))} ${settings.currency}`],
+      ['Expenses', `${num(sum(data.expenses, 'amount'))} ${settings.currency}`],
+      ['Net Balance', `${num(sum(data.income, 'amount') - sum(data.expenses, 'amount'))} ${settings.currency}`],
+    ]
+
+    autoTable(doc, {
+      startY: 42,
+      head: [['Metric', 'Value']],
+      body: summaryRows,
+      theme: 'grid',
+      headStyles: { fillColor: [120, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      styles: { cellPadding: 3, fontSize: 9 },
+    })
+
+    const topPlayerRows = topPlayers.map((p, i) => [String(i + 1), p.ign, String(p.kills), String(p.points)])
+    const topY = doc.lastAutoTable.finalY + 12
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('Overall Top Players', 14, topY)
+
+    autoTable(doc, {
+      startY: topY + 5,
+      head: [['#', 'IGN', 'Kills', 'Points']],
+      body: topPlayerRows,
+      theme: 'grid',
+      headStyles: { fillColor: [70, 70, 70], textColor: [255, 255, 255] },
+      styles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+    })
+
+    const bestY = doc.lastAutoTable.finalY + 12
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('Best 5 Matches', 14, bestY)
+
+    const matchRows = bestMatches.map((m, i) => [
+      String(i + 1),
+      m.played_on,
+      m.tournament || 'Match',
+      m.map || '—',
+      String(m.points),
+    ])
+
+    autoTable(doc, {
+      startY: bestY + 5,
+      head: [['#', 'Date', 'Tournament', 'Map', 'Points']],
+      body: matchRows,
+      theme: 'grid',
+      headStyles: { fillColor: [70, 70, 70], textColor: [255, 255, 255] },
+      styles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+    })
+
+    const trainingY = doc.lastAutoTable.finalY + 12
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('Training Attendance', 14, trainingY)
+
+    const trainingRows = (data.training || []).map((s) => {
+      const rate = Number(s.total_players || 0)
+        ? (Number(s.attendees || 0) / Number(s.total_players || 0)) * 100
+        : 0
+      return [s.name, s.held_on, String(s.attendees), String(s.total_players), `${num(rate)}%`]
+    })
+
+    autoTable(doc, {
+      startY: trainingY + 5,
+      head: [['Session', 'Date', 'Attendees', 'Total', 'Rate']],
+      body: trainingRows,
+      theme: 'grid',
+      headStyles: { fillColor: [70, 70, 70], textColor: [255, 255, 255] },
+      styles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+    })
+
+    const avgY = doc.lastAutoTable.finalY + 12
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('Average Team Performance', 14, avgY)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(`Total Points: ${num(totalPoints)}`, 14, avgY + 8)
+    doc.text(`Matches Played: ${totalMatches}`, 14, avgY + 14)
+    doc.text(`Average Points / Match: ${num(averagePointsPerMatch)}`, 14, avgY + 20)
+    doc.text('Example: 4 matches × 20 total points = 5 points average', 14, avgY + 28)
+
+    doc.save(`${settings.team_name || 'Nightmare_Esports'}_Professional_Report.pdf`)
   }
 
   const performanceCards = (
@@ -148,7 +267,7 @@ export default function Reports() {
         <table className="tbl">
           <thead><tr><th>Session Name</th><th>Date</th><th>Attendees</th><th>Total Players</th><th>Rate</th></tr></thead>
           <tbody>
-            {data?.training?.map((session) => {
+            {(data?.training || []).map((session) => {
               const rate = Number(session.total_players || 0)
                 ? (Number(session.attendees || 0) / Number(session.total_players || 0)) * 100
                 : 0
@@ -193,7 +312,7 @@ export default function Reports() {
           <table className="tbl">
             <thead><tr><th>Date</th><th>Category</th><th>Description</th><th className="text-right">Amount</th></tr></thead>
             <tbody>
-              {data?.expenses?.map((x) => (
+              {(data?.expenses || []).map((x) => (
                 <tr key={x.id}>
                   <td>{x.spent_on}</td>
                   <td>{x.category}</td>
@@ -210,7 +329,7 @@ export default function Reports() {
           <table className="tbl">
             <thead><tr><th>Date</th><th>Type</th><th>Description</th><th className="text-right">Amount</th></tr></thead>
             <tbody>
-              {data?.income?.map((x) => (
+              {(data?.income || []).map((x) => (
                 <tr key={x.id}>
                   <td>{x.received_on}</td>
                   <td>{x.type}</td>
@@ -243,7 +362,7 @@ export default function Reports() {
         <table className="tbl">
           <thead><tr><th>Date</th><th>Tournament</th><th>Map</th><th>Place</th><th>Kills</th><th>Points</th></tr></thead>
           <tbody>
-            {data?.matches?.map((m) => (
+            {(data?.matches || []).map((m) => (
               <tr key={m.id}>
                 <td>{m.played_on}</td>
                 <td>{m.tournament}</td>
@@ -276,7 +395,8 @@ export default function Reports() {
         actions={
           <div className="no-print flex gap-2">
             <button className="btn-ghost" onClick={() => window.print()}><Printer size={16} /> Print / Save PDF</button>
-            <button className="btn-primary" disabled={!data} onClick={exportAll}><Download size={16} /> Export CSV</button>
+            <button className="btn-primary" disabled={!data} onClick={generateReportPdf}><Download size={16} /> Generate PDF</button>
+            <button className="btn-ghost" disabled={!data} onClick={exportAll}><Download size={16} /> Export CSV</button>
           </div>
         }
       />
