@@ -56,5 +56,6 @@ body {
 .report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
   @page { size: A4 landscape; margin: 6mm; }
+  main { padding: 0 !important; }
   .report-sheet { background: #070405 !important; color: #e5e7eb !important; border: 0 !important; }
 }

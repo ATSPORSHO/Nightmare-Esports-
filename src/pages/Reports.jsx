@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Download, Printer, FileText, Table2 } from 'lucide-react'
+import { Download, Printer, FileText, Table2, Wallet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useSettings } from '../context/SettingsContext'
@@ -16,6 +16,18 @@ export default function Reports() {
   const [view, setView] = useState('team') // 'team' = one-page team report, 'detail' = full tables
   const [from, setFrom] = useState(addDays(todayStr(), -29))
   const [to, setTo] = useState(todayStr())
+  // tick the parts you want in the printed report
+  const [show, setShow] = useState({
+    snapshot: true, top: true, matches: true,
+    summary: true, expenses: true, income: true,
+    fsummary: true, fcat: true, fincome: true, fexpenses: true,
+  })
+  const toggle = (k) => setShow((x) => ({ ...x, [k]: !x[k] }))
+  const PARTS = {
+    team: [['snapshot', 'Performance snapshot'], ['top', 'Top players'], ['matches', 'Match results']],
+    detail: [['summary', 'Summary'], ['matches', 'Matches'], ['expenses', 'Expenses'], ['income', 'Income']],
+    finance: [['fsummary', 'Totals'], ['fcat', 'Category breakdown'], ['fincome', 'Income list'], ['fexpenses', 'Expense list']],
+  }
 
   const { data, loading } = useData(async () => {
     const [matches, expenses, income, training, stats, roster] = await Promise.all([
@@ -67,6 +79,18 @@ export default function Reports() {
     }
   }, [data])
 
+  const fin = useMemo(() => {
+    if (!data) return null
+    const group = (rows, key) => {
+      const g = {}
+      rows.forEach((x) => { const k = x[key] || 'Other'; g[k] = (g[k] || 0) + Number(x.amount || 0) })
+      return Object.entries(g).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total)
+    }
+    const inc = sum(data.income, 'amount')
+    const exp = sum(data.expenses, 'amount')
+    return { inc, exp, net: inc - exp, incBy: group(data.income, 'type'), expBy: group(data.expenses, 'category') }
+  }, [data])
+
   const exportAll = () => {
     download(`matches_${from}_${to}.csv`, toCsv(data.matches))
     download(`expenses_${from}_${to}.csv`, toCsv(data.expenses))
@@ -79,7 +103,7 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader
+      <div className="no-print"><PageHeader
         title="Reports"
         subtitle="Pick a date range, choose a report style, then print or export."
         actions={
@@ -88,7 +112,7 @@ export default function Reports() {
             <button className="btn-primary" disabled={!data} onClick={exportAll}><Download size={16} /> Export CSV</button>
           </div>
         }
-      />
+      /></div>
 
       <div className="no-print mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -98,7 +122,17 @@ export default function Reports() {
         <div className="flex gap-2">
           <button onClick={() => setView('team')} className={`btn btn-sm ${view === 'team' ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}><FileText size={14} /> Team report</button>
           <button onClick={() => setView('detail')} className={`btn btn-sm ${view === 'detail' ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}><Table2 size={14} /> Detailed report</button>
+          <button onClick={() => setView('finance')} className={`btn btn-sm ${view === 'finance' ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}><Wallet size={14} /> Financial report</button>
         </div>
+      </div>
+
+      <div className="no-print mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-ink-700 bg-ink-900/60 px-4 py-3 text-sm">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Include in print:</span>
+        {PARTS[view].map(([k, label]) => (
+          <label key={k} className="flex items-center gap-2 text-slate-200">
+            <input type="checkbox" checked={!!show[k]} onChange={() => toggle(k)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> {label}
+          </label>
+        ))}
       </div>
 
       {loading || !data || !t ? <Spinner /> : view === 'team' ? (
@@ -120,6 +154,7 @@ export default function Reports() {
               </div>
             </div>
 
+            {show.snapshot && <div>
             <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Performance snapshot</h3>
             <div className="grid grid-cols-2 divide-x divide-y divide-ink-600 overflow-hidden rounded-lg border border-ink-600 bg-ink-900 sm:grid-cols-4 lg:grid-cols-7 lg:divide-y-0">
               {[
@@ -138,6 +173,8 @@ export default function Reports() {
               ))}
             </div>
 
+            </div>}
+            {show.top && <div>
             <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Top player performance</h3>
             <div className="mx-auto max-w-3xl overflow-hidden rounded-lg border border-ink-600 bg-ink-900 text-sm">
               <div className={`grid grid-cols-[64px_1fr_110px_150px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
@@ -154,6 +191,8 @@ export default function Reports() {
               {!t.top.length && <div className="px-3 py-4 text-center text-slate-500">No player stats recorded in this period.</div>}
             </div>
 
+            </div>}
+            {show.matches && <div>
             <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Match results &amp; highlights</h3>
             <div className="overflow-x-auto rounded-lg border border-ink-600 bg-ink-900 text-sm">
               <div className={`grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
@@ -174,6 +213,7 @@ export default function Reports() {
             {t.matchRows.length > 12 && (
               <p className="mt-2 text-[11px] text-slate-500">Showing the latest 12 of {t.matchRows.length} matches. The Detailed report lists all of them.</p>
             )}
+            </div>}
             <p className="mt-3 text-[10px] text-slate-500">
               Avg. ratios are per match. Attendance = players present ÷ players expected across training sessions. Generated {todayStr()} from recorded data.
             </p>
@@ -183,10 +223,97 @@ export default function Reports() {
             <span>Internal team report</span>
           </div>
         </div>
+      ) : view === 'finance' ? (
+        /* ===================== FINANCIAL REPORT (income & expenses only) ===================== */
+        <div className="report-sheet overflow-hidden rounded-xl border border-ink-600 bg-ink-950">
+          <div className="h-2 bg-accent" />
+          <div className="p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="font-display text-4xl font-bold tracking-wide text-white sm:text-5xl">
+                  {first} {rest.length > 0 && <span className={RED}>{rest.join(' ')}</span>}
+                </h2>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">Financial Report • Income &amp; Expenses</p>
+              </div>
+              <div className="min-w-[220px] rounded-lg border border-ink-600 bg-ink-900 p-4 text-xs">
+                <div className="mb-3 font-semibold uppercase tracking-[0.18em] text-slate-400">Reporting period</div>
+                <div className="mb-2 flex gap-2 text-slate-300"><span className="w-10 text-slate-500">From:</span><span className="flex-1 border-b border-ink-600 text-white">{from}</span></div>
+                <div className="flex gap-2 text-slate-300"><span className="w-10 text-slate-500">To:</span><span className="flex-1 border-b border-ink-600 text-white">{to}</span></div>
+              </div>
+            </div>
+
+            {show.fsummary && (
+              <div>
+                <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Financial summary ({settings.currency})</h3>
+                <div className="grid grid-cols-2 divide-x divide-ink-600 overflow-hidden rounded-lg border border-ink-600 bg-ink-900 sm:grid-cols-4">
+                  {[
+                    ['Total income', num(fin.inc), 'text-white'],
+                    ['Total expenses', num(fin.exp), 'text-white'],
+                    ['Net balance', num(fin.net), fin.net < 0 ? 'text-red-400' : 'text-emerald-400'],
+                    ['Transactions', num(data.income.length + data.expenses.length), 'text-white'],
+                  ].map(([label, value, cls]) => (
+                    <div key={label} className="p-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</div>
+                      <div className={`mt-2 font-display text-3xl font-bold ${cls}`}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {show.fcat && (
+              <div className="grid gap-6 sm:grid-cols-2">
+                {[['Income by type', fin.incBy, fin.inc], ['Expenses by category', fin.expBy, fin.exp]].map(([title, rows, total]) => (
+                  <div key={title}>
+                    <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">{title}</h3>
+                    <div className="overflow-hidden rounded-lg border border-ink-600 bg-ink-900 text-sm">
+                      <div className={`grid grid-cols-[1fr_110px_60px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
+                        <span>Category</span><span className="text-right">Amount</span><span className="text-right">%</span>
+                      </div>
+                      {rows.map((x) => (
+                        <div key={x.name} className="grid grid-cols-[1fr_110px_60px] border-b border-ink-700 px-3 py-2 text-slate-200">
+                          <span>{x.name}</span><span className="text-right">{num(x.total)}</span>
+                          <span className="text-right text-slate-400">{total ? Math.round((x.total / total) * 100) : 0}%</span>
+                        </div>
+                      ))}
+                      {!rows.length && <div className="px-3 py-4 text-center text-slate-500">None in this period.</div>}
+                      <div className="grid grid-cols-[1fr_110px_60px] bg-ink-800 px-3 py-2 font-semibold text-white">
+                        <span>Total</span><span className="text-right">{num(total)}</span><span />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {[['fincome', 'Income', data.income, 'received_on', 'type'], ['fexpenses', 'Expenses', data.expenses, 'spent_on', 'category']].map(([k, title, rows, dateKey, catKey]) => show[k] && (
+              <div key={k}>
+                <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">{title} list</h3>
+                <div className="overflow-x-auto rounded-lg border border-ink-600 bg-ink-900 text-sm">
+                  <div className={`grid min-w-[520px] grid-cols-[110px_140px_1fr_110px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
+                    <span>Date</span><span>{catKey === 'type' ? 'Type' : 'Category'}</span><span>Description</span><span className="text-right">Amount</span>
+                  </div>
+                  {rows.map((x) => (
+                    <div key={x.id} className="grid min-w-[520px] grid-cols-[110px_140px_1fr_110px] border-b border-ink-700 px-3 py-2 text-slate-200 last:border-0">
+                      <span className="text-slate-400">{x[dateKey]}</span><span>{x[catKey] || '—'}</span>
+                      <span className="truncate">{x.description || '—'}</span><span className="text-right font-semibold text-white">{num(x.amount)}</span>
+                    </div>
+                  ))}
+                  {!rows.length && <div className="px-3 py-4 text-center text-slate-500">None in this period.</div>}
+                </div>
+              </div>
+            ))}
+            <p className="mt-4 text-[10px] text-slate-500">Amounts in {settings.currency}. Generated {todayStr()} from recorded data.</p>
+          </div>
+          <div className="mx-6 flex flex-wrap justify-between gap-2 border-t border-ink-600 py-3 text-[10px] uppercase tracking-[0.15em] text-slate-500 sm:mx-8">
+            <span>{(settings.team_name || '').toUpperCase()} / Finance</span>
+            <span>Internal financial report</span>
+          </div>
+        </div>
       ) : (
         /* ===================== DETAILED REPORT (previous version) ===================== */
         <div className="space-y-4">
-          <Card>
+          {show.summary && <Card>
             <h2 className="font-display text-2xl font-bold text-white">{settings.team_name} — Report</h2>
             <p className="mb-4 text-sm text-slate-400">{from} to {to}</p>
             <table className="tbl max-w-xl">
@@ -200,9 +327,9 @@ export default function Reports() {
                 <tr><td>Net balance ({settings.currency})</td><td className="text-right font-semibold text-emerald-400">{num(sum(data.income, 'amount') - sum(data.expenses, 'amount'))}</td></tr>
               </tbody>
             </table>
-          </Card>
+          </Card>}
 
-          <Card title="Matches" className="overflow-x-auto">
+          {show.matches && <Card title="Matches" className="overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Date</th><th>Tournament</th><th>Map</th><th>Place</th><th>Kills</th><th>Points</th></tr></thead>
               <tbody>
@@ -210,10 +337,10 @@ export default function Reports() {
                 {!data.matches.length && <tr><td colSpan={6} className="text-slate-500">None</td></tr>}
               </tbody>
             </table>
-          </Card>
+          </Card>}
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card title="Expenses" className="overflow-x-auto">
+            {show.expenses && <Card title="Expenses" className="overflow-x-auto">
               <table className="tbl">
                 <thead><tr><th>Date</th><th>Category</th><th>Description</th><th className="text-right">Amount</th></tr></thead>
                 <tbody>
@@ -221,8 +348,8 @@ export default function Reports() {
                   {!data.expenses.length && <tr><td colSpan={4} className="text-slate-500">None</td></tr>}
                 </tbody>
               </table>
-            </Card>
-            <Card title="Income" className="overflow-x-auto">
+            </Card>}
+            {show.income && <Card title="Income" className="overflow-x-auto">
               <table className="tbl">
                 <thead><tr><th>Date</th><th>Type</th><th>Description</th><th className="text-right">Amount</th></tr></thead>
                 <tbody>
@@ -230,7 +357,7 @@ export default function Reports() {
                   {!data.income.length && <tr><td colSpan={4} className="text-slate-500">None</td></tr>}
                 </tbody>
               </table>
-            </Card>
+            </Card>}
           </div>
         </div>
       )}

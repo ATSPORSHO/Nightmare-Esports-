@@ -51,7 +51,7 @@ export default function Layout() {
     <div className="min-h-screen">
       {/* ---------- header ---------- */}
       <header
-        className="relative border-b border-ink-700/80 bg-ink-900/90"
+        className="no-print relative border-b border-ink-700/80 bg-ink-900/90"
         style={settings.banner_url ? {
           backgroundImage: `linear-gradient(90deg, rgba(7,4,5,.95) 0%, rgba(7,4,5,.55) 50%, rgba(7,4,5,.95) 100%), url(${settings.banner_url})`,
           backgroundSize: 'cover', backgroundPosition: 'center',
@@ -119,7 +119,7 @@ export default function Layout() {
       <div className="flex">
         {/* ---------- sidebar ---------- */}
         <aside
-          className={`${open ? 'block' : 'hidden'} fixed inset-x-0 top-[72px] z-30 border-b border-ink-700 bg-ink-900 p-3 lg:static lg:block lg:min-h-[calc(100vh-72px)] lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r lg:bg-ink-900/60`}
+          className={`no-print ${open ? 'block' : 'hidden'} fixed inset-x-0 top-[72px] z-30 border-b border-ink-700 bg-ink-900 p-3 lg:static lg:block lg:min-h-[calc(100vh-72px)] lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r lg:bg-ink-900/60`}
         >
           <nav className="flex flex-col gap-1">
             {nav.map((n) => (

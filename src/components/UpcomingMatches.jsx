@@ -113,7 +113,7 @@ function ScheduleForm({ row, onClose, onSaved, today }) {
     setBusy(true); setErr('')
     const payload = {
       match_date: f.match_date, match_time: f.match_time, tournament: f.tournament,
-      stage: f.stage || null, map: f.map || null, notes: f.notes || null,
+      stage: f.stage || null, notes: f.notes || null,
     }
     const q = supabase.from('match_schedule')
     const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert(payload)
@@ -130,12 +130,6 @@ function ScheduleForm({ row, onClose, onSaved, today }) {
           <Field label="Date"><input className="input" type="date" required value={f.match_date} onChange={set('match_date')} /></Field>
           <Field label="Time (team timezone)"><input className="input" type="time" required value={f.match_time} onChange={set('match_time')} /></Field>
           <Field label="Stage / round"><input className="input" value={f.stage || ''} onChange={set('stage')} placeholder="Week 2 Day 3" /></Field>
-          <Field label="Map">
-            <select className="input" value={f.map || ''} onChange={set('map')}>
-              <option value="">—</option>
-              {MAPS.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </Field>
         </div>
         <Field label="Notes"><input className="input" value={f.notes || ''} onChange={set('notes')} placeholder="Be online 30 min before" /></Field>
         <ErrorBox>{err}</ErrorBox>
