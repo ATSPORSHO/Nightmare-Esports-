@@ -9,7 +9,7 @@ import { num } from '../lib/format'
 import { Spinner } from '../components/ui'
 
 const fmtDate = (d) =>
-  new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+  new Date(d + 'T00:00:00Z').getUTCFullYear()
 
 function SectionTitle({ children, action }) {
   return (
