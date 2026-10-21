@@ -84,8 +84,7 @@ export default function Home() {
         className="relative overflow-hidden rounded-2xl border border-red-900/60 px-6 py-10 shadow-[0_0_60px_-25px_rgba(200,16,46,.7)] sm:px-10 sm:py-14"
         style={{ backgroundImage: heroBg, backgroundSize: 'cover', backgroundPosition: 'center' }}
       >
-        <div className="flex flex-wrap items-center gap-8">
-          {settings.logo_url && <img src={settings.logo_url} alt="" className="h-28 w-28 shrink-0 object-contain drop-shadow-[0_0_22px_rgba(200,16,46,.7)] sm:h-36 sm:w-36" />}
+        <div className="flex flex-wrap items-center gap-8
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.4em] text-red-500">Welcome to —</div>
             <h1 className="mt-2 font-display text-5xl font-extrabold uppercase leading-none tracking-wide text-white sm:text-7xl">{first}</h1>
