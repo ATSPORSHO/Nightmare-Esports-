@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { Palette, Users, CalendarClock, Zap, Mail, Inbox } from 'lucide-react'
+import { Palette, Users, CalendarClock, Zap, Mail, Inbox, Flame, Trophy } from 'lucide-react'
 import { PageHeader } from '../components/ui'
 import Branding from './admin/Branding'
 import PlayersAdmin from './admin/PlayersAdmin'
@@ -7,9 +7,13 @@ import SchedulesAdmin from './admin/SchedulesAdmin'
 import QuickActionsAdmin from './admin/QuickActionsAdmin'
 import RemindersAdmin from './admin/RemindersAdmin'
 import SubmissionsAdmin from './admin/SubmissionsAdmin'
+import LineupsAdmin from './admin/LineupsAdmin'
+import EventsAdmin from './admin/EventsAdmin'
 
 const TABS = [
   { key: 'branding', label: 'Branding & Access', icon: Palette, C: Branding },
+  { key: 'lineups', label: 'Lineups', icon: Flame, C: LineupsAdmin },
+  { key: 'events', label: 'Events', icon: Trophy, C: EventsAdmin },
   { key: 'players', label: 'Players & Accounts', icon: Users, C: PlayersAdmin },
   { key: 'schedules', label: 'Schedules', icon: CalendarClock, C: SchedulesAdmin },
   { key: 'actions', label: 'Quick Actions', icon: Zap, C: QuickActionsAdmin },

@@ -5,6 +5,8 @@ import { SettingsProvider, useSettings } from './context/SettingsContext'
 import { configured } from './lib/supabase'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
+import Home from './pages/Home'
+import { LineupProvider } from './context/LineupContext'
 import Players from './pages/Players'
 import Matches from './pages/Matches'
 import Finance from './pages/Finance'
@@ -59,11 +61,13 @@ export default function App() {
     <HashRouter>
       <AuthProvider>
         <SettingsProvider>
+          <LineupProvider>
           <NextRedirect />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<Layout />}>
-              <Route index element={<Dashboard />} />
+              <Route index element={<Home />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="players" element={<Guard roles={['admin', 'player']}><Players /></Guard>} />
               <Route path="matches" element={<Guard roles={['admin', 'player']}><Matches /></Guard>} />
               <Route path="finance" element={<Guard roles={['admin', 'player']}><Finance /></Guard>} />
@@ -75,6 +79,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
+          </LineupProvider>
         </SettingsProvider>
       </AuthProvider>
     </HashRouter>

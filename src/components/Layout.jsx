@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, Trophy, Wallet, Dumbbell, BarChart3, Settings, LogIn, LogOut, Bell, Menu, X, Clock, ShieldCheck, UserCircle, ChevronDown,
+  Home as HomeIcon, LayoutDashboard, Users, Trophy, Wallet, Dumbbell, BarChart3, Settings, LogIn, LogOut, Bell, Menu, X, Clock, ShieldCheck, UserCircle, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
@@ -9,7 +9,8 @@ import { supabase } from '../lib/supabase'
 import { Avatar } from './ui'
 
 const MEMBER_NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Home', icon: HomeIcon, end: true },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/players', label: 'Players', icon: Users },
   { to: '/matches', label: 'Match Results', icon: Trophy },
   { to: '/finance', label: 'Finance', icon: Wallet },
@@ -38,7 +39,7 @@ export default function Layout() {
       .then(({ count }) => setNewSubs(count || 0))
   }, [isAdmin])
 
-  const nav = role === 'guest' ? [MEMBER_NAV[0]] : [...MEMBER_NAV, isAdmin
+  const nav = role === 'guest' ? [MEMBER_NAV[0], MEMBER_NAV[1]] : [...MEMBER_NAV, isAdmin
     ? { to: '/admin', label: 'Admin Panel', icon: Settings }
     : { to: '/profile', label: 'My Profile', icon: UserCircle }]
 

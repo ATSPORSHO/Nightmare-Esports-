@@ -83,6 +83,14 @@ export default function Branding() {
         </div>
       </Card>
 
+      <Card title="Organization (home page)">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Organization name" hint="First word is shown big, the rest in red letters."><input className="input" value={f.org_name ?? ''} onChange={set('org_name')} placeholder="Nightmare Esports Organization" /></Field>
+          <Field label="Welcome line"><input className="input" value={f.org_tagline ?? ''} onChange={set('org_tagline')} /></Field>
+        </div>
+        <div className="mt-4"><Field label="About the organization"><textarea className="input min-h-[90px]" value={f.org_about ?? ''} onChange={set('org_about')} /></Field></div>
+      </Card>
+
       <Card title="Regional & links">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Currency code"><input className="input" value={f.currency} onChange={set('currency')} /></Field>
