@@ -165,7 +165,7 @@ function MatchForm({ match, roster, onClose, onSaved }) {
                     <input className="input !py-1" type="number" min="0" disabled={!on} value={st.kills ?? ''} onChange={(e) => setPlayer(p.id, 'kills', e.target.value)} />
                     <input className="input !py-1" type="number" min="0" disabled={!on} value={st.damage ?? ''} onChange={(e) => setPlayer(p.id, 'damage', e.target.value)} />
                     <input className="input !py-1" type="number" min="0" disabled={!on} value={st.assists ?? ''} onChange={(e) => setPlayer(p.id, 'assists', e.target.value)} />
-                    <input className="input !py-1" type="number" min="0" max="10" step="0.1" disabled={!on} value={st.rating ?? ''} onChange={(e) => setPlayer(p.id, 'rating', e.target.value)} />
+                    <input className="input !py-1" type="number" min="0" max="100" step="0.1" disabled={!on} value={st.rating ?? ''} onChange={(e) => setPlayer(p.id, 'rating', e.target.value)} />
                     <input className="input !py-1" type="number" min="0" step="0.1" disabled={!on} value={st.survival ?? ''} onChange={(e) => setPlayer(p.id, 'survival', e.target.value)} />
                   </div>
                 )
