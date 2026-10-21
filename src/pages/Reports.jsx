@@ -61,7 +61,7 @@ export default function Reports() {
       p.games += 1
     })
     const per = (a, g) => (g ? a / g : 0)
-    const top = Object.entries(byPlayer)
+    const all = Object.entries(byPlayer)
       .map(([id, v]) => {
         const r = data.roster.find((x) => x.id === id)
         return {
@@ -70,8 +70,16 @@ export default function Reports() {
           avgRating: per(v.rating, v.rated), avgSurvival: per(v.survival, v.games),
         }
       })
-      .sort((a, b) => b.kills - a.kills || b.avg - a.avg) // kills first
-      .slice(0, 5)
+    // Ranking score (0-100): Kills 30% · Damage 25% · Survival 15% · Assists 15% · Rating 15%
+    // Each per-match average is compared with the best player's average (rating is already out of 100).
+    const mx = (k) => Math.max(...all.map((p) => p[k]), 0)
+    const m = { avg: mx('avg'), avgDamage: mx('avgDamage'), avgSurvival: mx('avgSurvival'), avgAssists: mx('avgAssists') }
+    const rel = (v, k) => (m[k] ? v / m[k] : 0)
+    all.forEach((p) => {
+      p.score = 100 * (0.30 * rel(p.avg, 'avg') + 0.25 * rel(p.avgDamage, 'avgDamage') + 0.15 * rel(p.avgSurvival, 'avgSurvival')
+        + 0.15 * rel(p.avgAssists, 'avgAssists') + 0.15 * Math.min(p.avgRating / 100, 1))
+    })
+    const top = all.sort((a, b) => b.score - a.score || b.kills - a.kills).slice(0, 5)
 
     const n = data.matches.length
     const kills = sum(data.matches, 'kills')
@@ -106,7 +114,7 @@ export default function Reports() {
     download(`expenses_${from}_${to}.csv`, toCsv(data.expenses))
     download(`income_${from}_${to}.csv`, toCsv(data.income))
     download(`training_${from}_${to}.csv`, toCsv(data.training))
-    download(`top_players_${from}_${to}.csv`, toCsv(t.top.map((p, i) => ({ rank: i + 1, ign: p.ign, matches: p.games, total_kills: p.kills, avg_kills: p.avg.toFixed(2), avg_damage: p.avgDamage.toFixed(0), avg_assists: p.avgAssists.toFixed(2), avg_rating: p.avgRating.toFixed(2), avg_survival_min: p.avgSurvival.toFixed(1) }))))
+    download(`top_players_${from}_${to}.csv`, toCsv(t.top.map((p, i) => ({ rank: i + 1, ign: p.ign, score: p.score.toFixed(1), matches: p.games, total_kills: p.kills, avg_kills: p.avg.toFixed(2), avg_damage: p.avgDamage.toFixed(0), avg_assists: p.avgAssists.toFixed(2), avg_rating: p.avgRating.toFixed(2), avg_survival_min: p.avgSurvival.toFixed(1) }))))
     download(`best_matches_${from}_${to}.csv`, toCsv(t.best))
   }
 
@@ -188,11 +196,11 @@ export default function Reports() {
             {show.top && <div>
             <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Top player performance</h3>
             <div className="overflow-x-auto rounded-lg border border-ink-600 bg-ink-900 text-sm">
-              <div className={`grid min-w-[760px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
-                <span>Rank</span><span>In-game name (IGN)</span><span>Matches</span><span>Total kills</span><span>Avg kills</span><span>Avg damage</span><span>Avg assists</span><span>Avg rating</span><span>Avg survival</span>
+              <div className={`grid min-w-[840px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px_80px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
+                <span>Rank</span><span>In-game name (IGN)</span><span>Matches</span><span>Total kills</span><span>Avg kills</span><span>Avg damage</span><span>Avg assists</span><span>Avg rating</span><span>Avg survival</span><span>Score</span>
               </div>
               {t.top.map((p, i) => (
-                <div key={p.id} className="grid min-w-[760px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
+                <div key={p.id} className="grid min-w-[840px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px_80px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
                   <span className="text-slate-400">{pad2(i + 1)}</span>
                   <span className="font-semibold text-white">{p.ign}</span>
                   <span>{p.games}</span>
@@ -202,10 +210,12 @@ export default function Reports() {
                   <span>{p.avgAssists.toFixed(2)}</span>
                   <span>{p.avgRating ? p.avgRating.toFixed(2) : '—'}</span>
                   <span>{p.avgSurvival ? `${p.avgSurvival.toFixed(1)} min` : '—'}</span>
+                  <span className="font-semibold text-[#ff3b4a]">{p.score.toFixed(1)}</span>
                 </div>
               ))}
               {!t.top.length && <div className="px-3 py-4 text-center text-slate-500">No player stats recorded in this period.</div>}
             </div>
+            <p className="mt-2 text-[11px] text-slate-500">Ranked by score: Kills 30% · Damage 25% · Survival 15% · Assists 15% · Rating 15% (per-match averages, compared with the best player).</p>
 
             </div>}
             {show.matches && <div>
