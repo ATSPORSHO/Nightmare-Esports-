@@ -35,23 +35,22 @@ function useDashboardData(role, financeAllowed) {
     let alive = true
     ;(async () => {
       const member = role !== 'guest'
-      const [matches, stats, roster, training, expenses, income, updates] = await Promise.all([
+      const [matches, stats, roster, training, expenses, income] = await Promise.all([
         supabase.from('matches').select('*').order('played_on', { ascending: false }),
         supabase.from('match_player_stats').select('match_id, player_id, kills, points'),
         member
-          ? supabase.from('profiles').select('id, full_name, ign, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('sort_order').order('created_at')
+          ? supabase.from('profiles').select('id, full_name, ign, game_uid, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('sort_order').order('created_at')
           : supabase.from('public_roster').select('*').order('sort_order'),
         supabase.from('training_sessions')
           .select(member ? '*' : 'id, held_on, name, attendees, total_players')
           .order('held_on', { ascending: false }),
         financeAllowed ? supabase.from('expenses').select('*').order('spent_on', { ascending: false }) : Promise.resolve({ data: [] }),
         financeAllowed ? supabase.from('income').select('*').order('received_on', { ascending: false }) : Promise.resolve({ data: [] }),
-        supabase.from('updates').select('*').order('created_at', { ascending: false }).limit(5),
       ])
       if (!alive) return
       setD({
         matches: matches.data || [], stats: stats.data || [], roster: roster.data || [],
-        training: training.data || [], expenses: expenses.data || [], income: income.data || [], updates: updates.data || [],
+        training: training.data || [], expenses: expenses.data || [], income: income.data || [],
       })
     })()
     return () => { alive = false }
@@ -306,18 +305,17 @@ export default function Dashboard() {
             <Card title="Player Roster" icon={Users} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
               <table className="tbl">
                 <thead>
-                  <tr><th>#</th><th>Player</th><th>IGN</th><th>Role</th><th>Status</th>{isMember && <th className="text-right">Salary ({cur})</th>}</tr>
+                  <tr><th>#</th><th>IGN</th><th>UID</th></tr>
                 </thead>
                 <tbody>
                   {data.roster.slice(0, 5).map((p, i) => (
                     <tr key={p.id}>
                       <td>{i + 1}</td>
-                      <td>{p.full_name}</td>
-                      <td>{p.ign}</td><td>{p.player_role}</td><td><StatusBadge status={p.status} /></td>
-                      {isMember && <td className="text-right">{num(p.monthly_salary)}</td>}
+                      <td className="font-semibold text-white">{p.ign || p.full_name}</td>
+                      <td>{p.game_uid || '—'}</td>
                     </tr>
                   ))}
-                  {!data.roster.length && <tr><td colSpan={6} className="text-center text-slate-500">No players yet</td></tr>}
+                  {!data.roster.length && <tr><td colSpan={3} className="text-center text-slate-500">No players yet</td></tr>}
                 </tbody>
               </table>
             </Card>
@@ -366,9 +364,7 @@ export default function Dashboard() {
                 </div>
                 {isMember && <div className="mt-1 text-[11px] text-slate-500">Monthly salary commitment: {num(rosterTotalSalary)} {cur}</div>}
               </Card>
-            ) : (
-              <Card title="Latest Updates" icon={Activity}><Updates items={data.updates} /></Card>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -402,8 +398,6 @@ export default function Dashboard() {
               </div>
             </Card>
           )}
-
-          {financeAllowed && <Card title="Latest Updates" icon={Activity}><Updates items={data.updates} /></Card>}
 
           {settings.quote_text && (
             <div className="card flex items-center gap-3 border-accent/40 bg-gradient-to-br from-accent/20 to-ink-900">
@@ -440,24 +434,5 @@ function RecentMatches({ matches }) {
       ))}
       {!matches.length && <div className="py-4 text-center text-sm text-slate-500">No matches yet</div>}
     </div>
-  )
-}
-
-function Updates({ items }) {
-  if (!items.length) return <div className="py-3 text-center text-sm text-slate-500">No updates yet</div>
-  return (
-    <ul className="space-y-3">
-      {items.map((u) => (
-        <li key={u.id} className="flex items-start gap-3">
-          <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-400" />
-          <div className="min-w-0 flex-1">
-            <div className="flex justify-between gap-2 text-[13px] font-medium text-white">
-              <span>{u.message}</span><span className="shrink-0 text-[10px] font-normal text-slate-500">{timeAgo(u.created_at)}</span>
-            </div>
-            {u.detail && <div className="truncate text-[11px] text-slate-500">{u.detail}</div>}
-          </div>
-        </li>
-      ))}
-    </ul>
   )
 }

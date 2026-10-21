@@ -72,7 +72,11 @@ create table public.match_player_stats (
   match_id  uuid not null references public.matches(id) on delete cascade,
   player_id uuid not null references public.profiles(id) on delete cascade,
   kills     int not null default 0,
-  points    int not null default 0
+  points    int not null default 0,
+  damage    numeric not null default 0,
+  assists   int not null default 0,
+  rating    numeric,
+  survival_minutes numeric not null default 0
 );
 
 create table public.expenses (
@@ -234,7 +238,7 @@ create trigger log_profiles  after insert on public.profiles          for each r
 -- Guest-safe roster view (no phone / e-mail / salary / UID)
 -- ---------------------------------------------------------------------
 create or replace view public.public_roster with (security_invoker = false) as
-  select id, full_name, ign, player_role, status, avatar_url, sort_order
+  select id, full_name, ign, player_role, status, avatar_url, sort_order, game_uid
   from public.profiles
   where role = 'player' and (public.guest_ok() or auth.uid() is not null);
 grant select on public.public_roster to anon, authenticated;

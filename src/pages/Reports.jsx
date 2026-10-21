@@ -35,7 +35,7 @@ export default function Reports() {
       supabase.from('expenses').select('*').gte('spent_on', from).lte('spent_on', to).order('spent_on'),
       supabase.from('income').select('*').gte('received_on', from).lte('received_on', to).order('received_on'),
       supabase.from('training_sessions').select('*').gte('held_on', from).lte('held_on', to).order('held_on'),
-      supabase.from('match_player_stats').select('match_id, player_id, kills, points'),
+      supabase.from('match_player_stats').select('match_id, player_id, kills, points, damage, assists, rating, survival_minutes'),
       supabase.from('profiles').select('id, ign, full_name'),
     ])
     return {
@@ -51,15 +51,24 @@ export default function Reports() {
     if (!data) return null
     const ids = new Set(data.matches.map((m) => m.id))
     const byPlayer = {}
-    data.stats.filter((s) => ids.has(s.match_id)).forEach((s) => {
-      const p = (byPlayer[s.player_id] ||= { kills: 0, games: 0 })
-      p.kills += Number(s.kills) || 0
+    data.stats.filter((x) => ids.has(x.match_id)).forEach((x) => {
+      const p = (byPlayer[x.player_id] ||= { kills: 0, games: 0, damage: 0, assists: 0, rating: 0, rated: 0, survival: 0 })
+      p.kills += Number(x.kills) || 0
+      p.damage += Number(x.damage) || 0
+      p.assists += Number(x.assists) || 0
+      p.survival += Number(x.survival_minutes) || 0
+      if (x.rating != null) { p.rating += Number(x.rating); p.rated += 1 }
       p.games += 1
     })
+    const per = (a, g) => (g ? a / g : 0)
     const top = Object.entries(byPlayer)
       .map(([id, v]) => {
         const r = data.roster.find((x) => x.id === id)
-        return { id, ign: r?.ign || r?.full_name || 'Player', kills: v.kills, avg: v.games ? v.kills / v.games : 0 }
+        return {
+          id, ign: r?.ign || r?.full_name || 'Player', games: v.games, kills: v.kills,
+          avg: per(v.kills, v.games), avgDamage: per(v.damage, v.games), avgAssists: per(v.assists, v.games),
+          avgRating: per(v.rating, v.rated), avgSurvival: per(v.survival, v.games),
+        }
       })
       .sort((a, b) => b.kills - a.kills || b.avg - a.avg) // kills first
       .slice(0, 5)
@@ -76,6 +85,7 @@ export default function Reports() {
       pointRatio: ratio(points, n),
       attendance: expected ? `${Math.round((present / expected) * 100)}%` : '—',
       matchRows: [...data.matches].reverse(),
+      best: [...data.matches].sort((a, b) => b.points - a.points || b.kills - a.kills || (a.placement || 99) - (b.placement || 99)).slice(0, 5),
     }
   }, [data])
 
@@ -96,7 +106,8 @@ export default function Reports() {
     download(`expenses_${from}_${to}.csv`, toCsv(data.expenses))
     download(`income_${from}_${to}.csv`, toCsv(data.income))
     download(`training_${from}_${to}.csv`, toCsv(data.training))
-    download(`top_players_${from}_${to}.csv`, toCsv(t.top.map((p, i) => ({ rank: i + 1, ign: p.ign, total_kills: p.kills, avg_kill_ratio: p.avg.toFixed(2) }))))
+    download(`top_players_${from}_${to}.csv`, toCsv(t.top.map((p, i) => ({ rank: i + 1, ign: p.ign, matches: p.games, total_kills: p.kills, avg_kills: p.avg.toFixed(2), avg_damage: p.avgDamage.toFixed(0), avg_assists: p.avgAssists.toFixed(2), avg_rating: p.avgRating.toFixed(2), avg_survival_min: p.avgSurvival.toFixed(1) }))))
+    download(`best_matches_${from}_${to}.csv`, toCsv(t.best))
   }
 
   const [first, ...rest] = (settings.team_name || 'Team').toUpperCase().split(' ')
@@ -176,16 +187,21 @@ export default function Reports() {
             </div>}
             {show.top && <div>
             <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Top player performance</h3>
-            <div className="mx-auto max-w-3xl overflow-hidden rounded-lg border border-ink-600 bg-ink-900 text-sm">
-              <div className={`grid grid-cols-[64px_1fr_110px_150px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
-                <span>Rank</span><span>In-game name (IGN)</span><span>Total kills</span><span>Average kill ratio</span>
+            <div className="overflow-x-auto rounded-lg border border-ink-600 bg-ink-900 text-sm">
+              <div className={`grid min-w-[760px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
+                <span>Rank</span><span>In-game name (IGN)</span><span>Matches</span><span>Total kills</span><span>Avg kills</span><span>Avg damage</span><span>Avg assists</span><span>Avg rating</span><span>Avg survival</span>
               </div>
               {t.top.map((p, i) => (
-                <div key={p.id} className="grid grid-cols-[64px_1fr_110px_150px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
+                <div key={p.id} className="grid min-w-[760px] grid-cols-[48px_1fr_80px_90px_90px_100px_90px_90px_110px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
                   <span className="text-slate-400">{pad2(i + 1)}</span>
                   <span className="font-semibold text-white">{p.ign}</span>
+                  <span>{p.games}</span>
                   <span className="font-semibold text-white">{num(p.kills)}</span>
                   <span>{p.avg.toFixed(2)}</span>
+                  <span>{num(Math.round(p.avgDamage))}</span>
+                  <span>{p.avgAssists.toFixed(2)}</span>
+                  <span>{p.avgRating ? p.avgRating.toFixed(2) : '—'}</span>
+                  <span>{p.avgSurvival ? `${p.avgSurvival.toFixed(1)} min` : '—'}</span>
                 </div>
               ))}
               {!t.top.length && <div className="px-3 py-4 text-center text-slate-500">No player stats recorded in this period.</div>}
@@ -193,13 +209,14 @@ export default function Reports() {
 
             </div>}
             {show.matches && <div>
-            <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Match results &amp; highlights</h3>
+            <h3 className="mb-3 mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white">Top 5 best matches</h3>
             <div className="overflow-x-auto rounded-lg border border-ink-600 bg-ink-900 text-sm">
-              <div className={`grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
-                <span>Date</span><span>Tournament</span><span>Map</span><span>Placement</span><span>Kills</span><span>Points</span>
+              <div className={`grid min-w-[620px] grid-cols-[56px_110px_1fr_110px_100px_80px_80px] border-b-2 border-[#ff3b4a] bg-ink-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${RED}`}>
+                <span>Rank</span><span>Date</span><span>Tournament</span><span>Map</span><span>Placement</span><span>Kills</span><span>Points</span>
               </div>
-              {t.matchRows.slice(0, 12).map((m, i) => (
-                <div key={m.id} className={`${i >= 10 ? 'print-hide ' : ''}grid min-w-[560px] grid-cols-[110px_1fr_110px_100px_80px_80px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0`}>
+              {t.best.map((m, i) => (
+                <div key={m.id} className="grid min-w-[620px] grid-cols-[56px_110px_1fr_110px_100px_80px_80px] border-b border-ink-700 px-3 py-2.5 text-slate-200 last:border-0">
+                  <span className="text-slate-400">{pad2(i + 1)}</span>
                   <span className="text-slate-400">{m.played_on}</span>
                   <span className="truncate font-medium text-white">{m.tournament}</span>
                   <span>{m.map || '—'}</span>
@@ -210,12 +227,10 @@ export default function Reports() {
               ))}
               {!t.matchRows.length && <div className="px-3 py-4 text-center text-slate-500">No matches recorded in this period.</div>}
             </div>
-            {t.matchRows.length > 12 && (
-              <p className="mt-2 text-[11px] text-slate-500">Showing the latest {Math.min(12, t.matchRows.length)} of {t.matchRows.length} matches (10 on the printed page). The Detailed report lists all of them.</p>
-            )}
+            <p className="mt-2 text-[11px] text-slate-500">Best matches are ranked by points (placement points + kills), out of {t.matchRows.length} played in this period.</p>
             </div>}
             <p className="mt-3 text-[10px] text-slate-500">
-              Avg. ratios are per match. Attendance = players present ÷ players expected across training sessions. Generated {todayStr()} from recorded data.
+              Player averages count only the matches each player was ticked as playing. Attendance = players present ÷ players expected across training sessions. Generated {todayStr()} from recorded data.
             </p>
           </div>
           <div className="mx-6 flex flex-wrap justify-between gap-2 border-t border-ink-600 py-3 text-[10px] uppercase tracking-[0.15em] text-slate-500 sm:mx-8">

@@ -77,17 +77,19 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     if (!match.id) return
     supabase.from('match_player_stats').select('*').eq('match_id', match.id).then(({ data }) => {
       const s = {}
-      ;(data || []).forEach((r) => { s[r.player_id] = { kills: r.kills } })
+      ;(data || []).forEach((r) => { s[r.player_id] = { played: true, kills: r.kills, damage: r.damage, assists: r.assists, rating: r.rating ?? '', survival: r.survival_minutes } })
       setStats(s)
     })
   }, [match.id])
 
-  // players' kills add up to the team's kills automatically
-  const setPlayerKills = (id, v) => {
-    const next = { ...stats, [id]: { ...stats[id], kills: v } }
+  // players' kills add up to the team's kills automatically (only players who played)
+  const teamKills = (s) => Object.values(s).reduce((t, x) => t + (x.played ? Number(x.kills) || 0 : 0), 0)
+  const setPlayer = (id, k, v) => {
+    const next = { ...stats, [id]: { ...stats[id], [k]: v } }
     setStats(next)
-    setF((cur) => ({ ...cur, kills: Object.values(next).reduce((t, x) => t + (Number(x.kills) || 0), 0) }))
+    setF((cur) => ({ ...cur, kills: teamKills(next) }))
   }
+  const togglePlayed = (id) => setPlayer(id, 'played', !stats[id]?.played)
 
   // points are calculated: placement points + 1 per kill
   const placePts = placementPoints(f.placement)
@@ -109,8 +111,13 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     // replace per-player stats
     await supabase.from('match_player_stats').delete().eq('match_id', id)
     const rows = Object.entries(stats)
-      .map(([player_id, v]) => ({ match_id: id, player_id, kills: Number(v.kills) || 0, points: Number(v.kills) || 0 }))
-      .filter((r) => r.kills)
+      .filter(([, v]) => v.played)
+      .map(([player_id, v]) => ({
+        match_id: id, player_id, kills: Number(v.kills) || 0, points: Number(v.kills) || 0,
+        damage: Number(v.damage) || 0, assists: Number(v.assists) || 0,
+        rating: v.rating === '' || v.rating == null ? null : Number(v.rating),
+        survival_minutes: Number(v.survival) || 0,
+      }))
     if (rows.length) {
       const r2 = await supabase.from('match_player_stats').insert(rows)
       if (r2.error) { setErr(r2.error.message); setBusy(false); return }
@@ -143,15 +150,28 @@ function MatchForm({ match, roster, onClose, onSaved }) {
 
         {roster.length > 0 && (
           <div>
-            <div className="label">Player kills (add up to team kills · feeds “Top Players”)</div>
-            <div className="space-y-1.5 rounded-lg border border-ink-700 p-2">
-              {roster.map((p) => (
-                <div key={p.id} className="grid grid-cols-[1fr_110px] items-center gap-2 text-sm">
-                  <span>{p.ign || p.full_name}</span>
-                  <input className="input !py-1" type="number" min="0" placeholder="Kills" value={stats[p.id]?.kills ?? ''} onChange={(e) => setPlayerKills(p.id, e.target.value)} />
-                </div>
-              ))}
+            <div className="label">Who played? Tick the players, then enter their stats (kills add up to team kills)</div>
+            <div className="overflow-x-auto rounded-lg border border-ink-700 p-2">
+              <div className="grid min-w-[560px] grid-cols-[28px_1fr_70px_80px_70px_70px_90px] items-center gap-2 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <span /><span>Player</span><span>Kills</span><span>Damage</span><span>Assists</span><span>Rating</span><span>Survival (min)</span>
+              </div>
+              {roster.map((p) => {
+                const st = stats[p.id] || {}
+                const on = !!st.played
+                return (
+                  <div key={p.id} className={`grid min-w-[560px] grid-cols-[28px_1fr_70px_80px_70px_70px_90px] items-center gap-2 px-1 py-0.5 text-sm ${on ? '' : 'opacity-60'}`}>
+                    <input type="checkbox" checked={on} onChange={() => togglePlayed(p.id)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+                    <span className="truncate">{p.ign || p.full_name}</span>
+                    <input className="input !py-1" type="number" min="0" disabled={!on} value={st.kills ?? ''} onChange={(e) => setPlayer(p.id, 'kills', e.target.value)} />
+                    <input className="input !py-1" type="number" min="0" disabled={!on} value={st.damage ?? ''} onChange={(e) => setPlayer(p.id, 'damage', e.target.value)} />
+                    <input className="input !py-1" type="number" min="0" disabled={!on} value={st.assists ?? ''} onChange={(e) => setPlayer(p.id, 'assists', e.target.value)} />
+                    <input className="input !py-1" type="number" min="0" max="10" step="0.1" disabled={!on} value={st.rating ?? ''} onChange={(e) => setPlayer(p.id, 'rating', e.target.value)} />
+                    <input className="input !py-1" type="number" min="0" step="0.1" disabled={!on} value={st.survival ?? ''} onChange={(e) => setPlayer(p.id, 'survival', e.target.value)} />
+                  </div>
+                )
+              })}
             </div>
+            <p className="mt-1 text-[11px] text-slate-500">Averages in reports use only the matches a player is ticked for.</p>
           </div>
         )}
         <ErrorBox>{err}</ErrorBox>
