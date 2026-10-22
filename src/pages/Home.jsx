@@ -9,7 +9,7 @@ import { num } from '../lib/format'
 import { Spinner } from '../components/ui'
 
 const fmtDate = (d) =>
-  new Date(d + 'T00:00:00Z').getUTCFullYear()
+  new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 function SectionTitle({ children, action }) {
   return (
@@ -84,7 +84,8 @@ export default function Home() {
         className="relative overflow-hidden rounded-2xl border border-red-900/60 px-6 py-10 shadow-[0_0_60px_-25px_rgba(200,16,46,.7)] sm:px-10 sm:py-14"
         style={{ backgroundImage: heroBg, backgroundSize: 'cover', backgroundPosition: 'center' }}
       >
-        <div className="flex flex-wrap items-center gap-8
+        <div className="flex flex-wrap items-center gap-8">
+          {settings.logo_url && <img src={settings.logo_url} alt="" className="h-28 w-28 shrink-0 object-contain drop-shadow-[0_0_22px_rgba(200,16,46,.7)] sm:h-36 sm:w-36" />}
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.4em] text-red-500">Welcome to —</div>
             <h1 className="mt-2 font-display text-5xl font-extrabold uppercase leading-none tracking-wide text-white sm:text-7xl">{first}</h1>
@@ -108,7 +109,7 @@ export default function Home() {
             </div>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <button className="btn-primary px-5 py-2.5" onClick={() => navigate('/dashboard')}>Open dashboard <ArrowRight size={16} /></button>
+              {stats.perLineup[0] && <button className="btn-primary px-5 py-2.5" onClick={() => navigate(`/lineup/${stats.perLineup[0].l.slug}`)}>View lineup dashboard <ArrowRight size={16} /></button>}
               {role === 'guest' && <Link to="/login" className="btn-ghost px-5 py-2.5"><LogIn size={16} /> Team login</Link>}
             </div>
           </div>
@@ -150,7 +151,7 @@ export default function Home() {
                       {!players.length && <div className="col-span-full py-3 text-center text-xs text-slate-500">No players in this lineup yet.</div>}
                     </div>
                     <div className="mt-4 text-center">
-                      <button className="btn-ghost btn-sm border-red-700/60 px-5" onClick={() => navigate(role === 'guest' ? '/dashboard' : '/players')}>View lineup <ArrowRight size={13} /></button>
+                      <button className="btn-ghost btn-sm border-red-700/60 px-5" onClick={() => navigate(`/lineup/${l.slug}`)}>View lineup <ArrowRight size={13} /></button>
                     </div>
                   </div>
                 ))}
@@ -219,7 +220,7 @@ export default function Home() {
           </section>
 
           <section className="card border-red-900/50">
-            <SectionTitle action={<Link to="/dashboard" className="text-xs font-semibold text-red-400 hover:text-red-300">View all →</Link>}>Team performance</SectionTitle>
+            <SectionTitle action={stats.perLineup[0] && <Link to={`/lineup/${stats.perLineup[0].l.slug}`} className="text-xs font-semibold text-red-400 hover:text-red-300">View all →</Link>}>Team performance</SectionTitle>
             <div className="grid grid-cols-2 gap-2">
               {[
                 ['Total matches', num(stats.matches)],

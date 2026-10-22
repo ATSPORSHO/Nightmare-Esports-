@@ -67,7 +67,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route element={<Layout />}>
               <Route index element={<Home />} />
-              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="lineup/:slug" element={<Dashboard />} />
+              <Route path="dashboard" element={<Navigate to="/" replace />} />
               <Route path="players" element={<Guard roles={['admin', 'player']}><Players /></Guard>} />
               <Route path="matches" element={<Guard roles={['admin', 'player']}><Matches /></Guard>} />
               <Route path="finance" element={<Guard roles={['admin', 'player']}><Finance /></Guard>} />

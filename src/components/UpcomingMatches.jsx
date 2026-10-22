@@ -3,6 +3,8 @@ import { CalendarClock, Plus, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useSettings } from '../context/SettingsContext'
+import { useLineup } from '../context/LineupContext'
+import LineupSelect from './LineupSelect'
 import { MAPS } from '../lib/constants'
 import { Card, ErrorBox, Field, Modal, Spinner } from './ui'
 
@@ -15,8 +17,10 @@ const fmtDate = (d) =>
  *   editable = false -> read only list (dashboard)
  * Date and time are the TEAM's local time (the timezone set in Admin Panel -> Branding).
  */
-export default function UpcomingMatches({ editable = false, limit = 5, bare = false }) {
+export default function UpcomingMatches({ editable = false, limit = 5, bare = false, lineup = null }) {
   const { settings } = useSettings()
+  const { activeLineups, lineupName } = useLineup()
+  const multi = activeLineups.length > 1
   const [editing, setEditing] = useState(null)
   const [showPast, setShowPast] = useState(false)
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone }).format(new Date())
@@ -24,7 +28,8 @@ export default function UpcomingMatches({ editable = false, limit = 5, bare = fa
   const { data, loading, error, reload } = useData(() =>
     supabase.from('match_schedule').select('*').order('match_date').order('match_time'))
 
-  const all = data || []
+  // on a lineup dashboard: that lineup's matches + matches shared by every lineup
+  const all = (data || []).filter((m) => !lineup || !m.lineup_id || m.lineup_id === lineup.id)
   const upcoming = all.filter((m) => m.match_date >= today)
   const past = all.filter((m) => m.match_date < today).reverse()
   const rows = (showPast && editable ? [...past, ...upcoming] : upcoming).slice(0, editable ? 200 : limit)
@@ -51,7 +56,7 @@ export default function UpcomingMatches({ editable = false, limit = 5, bare = fa
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-white">{m.tournament}</div>
                 <div className="truncate text-xs text-slate-400">
-                  {[m.stage, m.map].filter(Boolean).join(' · ')}{m.notes ? ` — ${m.notes}` : ''}
+                  {[multi || m.lineup_id ? (m.lineup_id ? lineupName(m.lineup_id) : 'All lineups') : null, m.stage, m.map].filter(Boolean).join(' · ')}{m.notes ? ` — ${m.notes}` : ''}
                 </div>
               </div>
               {editable && (
@@ -100,8 +105,9 @@ export default function UpcomingMatches({ editable = false, limit = 5, bare = fa
 }
 
 function ScheduleForm({ row, onClose, onSaved, today }) {
+  const { activeLineups } = useLineup()
   const [f, setF] = useState({
-    match_date: today, match_time: '20:00', tournament: '', stage: '', map: '', notes: '', ...row,
+    lineup_id: activeLineups[0]?.id || '', match_date: today, match_time: '20:00', tournament: '', stage: '', map: '', notes: '', ...row,
     match_time: String(row.match_time || '20:00').slice(0, 5),
   })
   const [err, setErr] = useState('')
@@ -113,7 +119,7 @@ function ScheduleForm({ row, onClose, onSaved, today }) {
     setBusy(true); setErr('')
     const payload = {
       match_date: f.match_date, match_time: f.match_time, tournament: f.tournament,
-      stage: f.stage || null, notes: f.notes || null,
+      stage: f.stage || null, notes: f.notes || null, lineup_id: f.lineup_id || null,
     }
     const q = supabase.from('match_schedule')
     const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert(payload)
@@ -125,6 +131,9 @@ function ScheduleForm({ row, onClose, onSaved, today }) {
   return (
     <Modal title={row.id ? 'Edit scheduled match' : 'Schedule a match'} onClose={onClose}>
       <form onSubmit={save} className="space-y-3">
+        <Field label="Lineup" hint="Which team plays this match.">
+          <LineupSelect value={f.lineup_id} allowShared sharedLabel="All lineups" onChange={(v) => setF({ ...f, lineup_id: v })} />
+        </Field>
         <Field label="Tournament / scrim"><input className="input" required value={f.tournament} onChange={set('tournament')} placeholder="PMPL SEA" /></Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date"><input className="input" type="date" required value={f.match_date} onChange={set('match_date')} /></Field>

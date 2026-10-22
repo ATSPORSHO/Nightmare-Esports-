@@ -10,7 +10,6 @@ import { Avatar } from './ui'
 
 const MEMBER_NAV = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/players', label: 'Players', icon: Users },
   { to: '/matches', label: 'Match Results', icon: Trophy },
   { to: '/finance', label: 'Finance', icon: Wallet },
@@ -39,7 +38,7 @@ export default function Layout() {
       .then(({ count }) => setNewSubs(count || 0))
   }, [isAdmin])
 
-  const nav = role === 'guest' ? [MEMBER_NAV[0], MEMBER_NAV[1]] : [...MEMBER_NAV, isAdmin
+  const nav = role === 'guest' ? [MEMBER_NAV[0]] : [...MEMBER_NAV, isAdmin
     ? { to: '/admin', label: 'Admin Panel', icon: Settings }
     : { to: '/profile', label: 'My Profile', icon: UserCircle }]
 

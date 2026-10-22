@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   Swords, Crosshair, Trophy, Wallet, PiggyBank, TrendingUp, TrendingDown, PieChart as PieIcon, CalendarCheck, Users, Dumbbell, Receipt, Banknote, Activity, CheckCircle2, Quote, LineChart,
 } from 'lucide-react'
@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
+import { useLineup } from '../context/LineupContext'
 import { addDays, daysBetween, num, pctChange, timeAgo, todayStr } from '../lib/format'
 import { Card, Spinner, StatusBadge } from '../components/ui'
 import { Donut, Legend, Ring } from '../components/charts'
@@ -29,7 +30,7 @@ function rangeFor(key) {
 }
 
 /* ------------------------------------------------------------------ */
-function useDashboardData(role, financeAllowed) {
+function useDashboardData(role, financeAllowed, lineup, single) {
   const [d, setD] = useState(null)
   useEffect(() => {
     let alive = true
@@ -48,13 +49,17 @@ function useDashboardData(role, financeAllowed) {
         financeAllowed ? supabase.from('income').select('*').order('received_on', { ascending: false }) : Promise.resolve({ data: [] }),
       ])
       if (!alive) return
+      // show only this lineup (with one lineup, rows without a lineup belong to it)
+      const mine = (r) => !lineup || r.lineup_id === lineup.id || (single && !r.lineup_id)
+      const ms = (matches.data || []).filter(mine)
+      const ids = new Set(ms.map((x) => x.id))
       setD({
-        matches: matches.data || [], stats: stats.data || [], roster: roster.data || [],
+        matches: ms, stats: (stats.data || []).filter((x) => ids.has(x.match_id)), roster: (roster.data || []).filter(mine),
         training: training.data || [], expenses: expenses.data || [], income: income.data || [],
       })
     })()
     return () => { alive = false }
-  }, [role, financeAllowed])
+  }, [role, financeAllowed, lineup?.id, single])
   return d
 }
 
@@ -84,7 +89,10 @@ export default function Dashboard() {
   const { role, isMember } = useAuth()
   const { settings } = useSettings()
   const financeAllowed = isMember || settings.guest_show_finance
-  const data = useDashboardData(role, financeAllowed)
+  const { slug } = useParams()
+  const { activeLineups } = useLineup()
+  const lineup = activeLineups.find((l) => l.slug === slug) || null
+  const data = useDashboardData(role, financeAllowed, lineup, activeLineups.length <= 1)
   const [preset, setPreset] = useState('30')
   const [actions, setActions] = useState([])
 
@@ -185,7 +193,8 @@ export default function Dashboard() {
       {/* title + date range */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">Dashboard</h1>
+          <Link to="/" className="text-xs font-semibold text-red-400 hover:text-red-300">← Back to home</Link>
+          <h1 className="font-display text-3xl font-bold text-white">{lineup ? `${lineup.name} — Dashboard` : 'Dashboard'}</h1>
           <p className="text-sm text-slate-400">{settings.dashboard_subtitle}</p>
         </div>
         <select className="input !w-auto" value={preset} onChange={(e) => setPreset(e.target.value)}>
@@ -371,7 +380,7 @@ export default function Dashboard() {
         {/* right column */}
         <div className="space-y-4">
           <Card title="Upcoming Matches" icon={CalendarCheck} link={isMember ? '/matches' : undefined}>
-            <UpcomingMatches bare limit={4} />
+            <UpcomingMatches bare limit={4} lineup={lineup} />
           </Card>
 
           {financeAllowed && (

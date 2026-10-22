@@ -8,6 +8,7 @@ import { num } from '../../lib/format'
 import { movePlayer } from '../../lib/roster'
 import { useLineup } from '../../context/LineupContext'
 import LineupSelect from '../../components/LineupSelect'
+import ImageField from '../../components/ImageField'
 import { Card, ErrorBox, Field, Modal, Notice, Spinner, StatusBadge } from '../../components/ui'
 
 async function callFn(body) {
@@ -120,7 +121,7 @@ function PlayerFields({ f, set }) {
 
 function CreateForm({ onClose, onCreated }) {
   const { activeLineups } = useLineup()
-  const [f, setF] = useState({ lineup_id: activeLineups[0]?.id || '', full_name: '', ign: '', game_uid: '', phone: '', player_role: PLAYER_ROLES[0], monthly_salary: 0, email: '', password: randomPassword() })
+  const [f, setF] = useState({ lineup_id: activeLineups[0]?.id || '', avatar_url: null, full_name: '', ign: '', game_uid: '', phone: '', player_role: PLAYER_ROLES[0], monthly_salary: 0, email: '', password: randomPassword() })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -128,10 +129,13 @@ function CreateForm({ onClose, onCreated }) {
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
-    const { lineup_id, ...rest } = f
+    const { lineup_id, avatar_url, ...rest } = f
     const r = await callFn({ action: 'create', ...rest, email: f.email.trim(), monthly_salary: Number(f.monthly_salary) || 0 })
     if (r.error) { setBusy(false); return setErr(r.error) }
-    if (lineup_id && r.profile?.id) await supabase.from('profiles').update({ lineup_id }).eq('id', r.profile.id)
+    const extra = {}
+    if (lineup_id) extra.lineup_id = lineup_id
+    if (avatar_url) extra.avatar_url = avatar_url
+    if (r.profile?.id && Object.keys(extra).length) await supabase.from('profiles').update(extra).eq('id', r.profile.id)
     setBusy(false)
     onCreated({ email: f.email.trim(), password: f.password })
   }
@@ -143,6 +147,7 @@ function CreateForm({ onClose, onCreated }) {
         <Field label="Lineup" hint="Which team this player belongs to.">
           <LineupSelect value={f.lineup_id} onChange={(v) => setF({ ...f, lineup_id: v })} />
         </Field>
+        <ImageField label="Profile picture (optional)" folder="player" value={f.avatar_url} onChange={(v) => setF({ ...f, avatar_url: v })} hint="Shown on the home page lineup." />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Login e-mail (Gmail)"><input className="input" type="email" required value={f.email} onChange={set('email')} /></Field>
           <Field label="Password" hint="Auto-generated. You can type your own (8+ characters).">
@@ -174,7 +179,7 @@ function EditForm({ player, onClose, onSaved }) {
     }
     const { error } = await supabase.from('profiles').update({
       full_name: f.full_name, ign: f.ign, game_uid: f.game_uid, phone: f.phone, player_role: f.player_role,
-      monthly_salary: Number(f.monthly_salary) || 0, status: f.status, lineup_id: f.lineup_id || null,
+      monthly_salary: Number(f.monthly_salary) || 0, status: f.status, lineup_id: f.lineup_id || null, avatar_url: f.avatar_url || null,
     }).eq('id', player.id)
     setBusy(false)
     if (error) return setErr(error.message)
@@ -186,6 +191,7 @@ function EditForm({ player, onClose, onSaved }) {
       <form onSubmit={submit} className="space-y-3">
         <PlayerFields f={f} set={set} />
         <Field label="Lineup"><LineupSelect value={f.lineup_id} allowShared sharedLabel="No lineup" onChange={(v) => setF({ ...f, lineup_id: v })} /></Field>
+        <ImageField label="Profile picture" folder="player" value={f.avatar_url} onChange={(v) => setF({ ...f, avatar_url: v })} hint="Shown on the home page lineup." />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Login e-mail"><input className="input" type="email" required value={f.email || ''} onChange={set('email')} /></Field>
           <Field label="Status">
