@@ -3,6 +3,7 @@ import { Download, Printer, FileText, Table2, Wallet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useSettings } from '../context/SettingsContext'
+import { useLineup } from '../context/LineupContext'
 import { addDays, download, num, todayStr, toCsv } from '../lib/format'
 import { Card, PageHeader, Spinner } from '../components/ui'
 
@@ -16,6 +17,10 @@ export default function Reports() {
   const [view, setView] = useState('team') // 'team' = one-page team report, 'detail' = full tables
   const [from, setFrom] = useState(addDays(todayStr(), -29))
   const [to, setTo] = useState(todayStr())
+  const { activeLineups } = useLineup()
+  const [lineupId, setLineupId] = useState('all') // 'all' = whole organization
+  const single = activeLineups.length <= 1
+  const lineupLabel = lineupId === 'all' ? (single ? 'Season Overview' : 'All lineups') : activeLineups.find((l) => l.id === lineupId)?.name || ''
   // tick the parts you want in the printed report
   const [show, setShow] = useState({
     snapshot: true, top: true, matches: true,
@@ -38,13 +43,18 @@ export default function Reports() {
       supabase.from('match_player_stats').select('match_id, player_id, kills, points, damage, assists, rating, survival_minutes'),
       supabase.from('profiles').select('id, ign, full_name'),
     ])
+    // one lineup only? keep rows that belong to it (with a single lineup, rows without a lineup count as its own)
+    const mine = (r) => lineupId === 'all' || r.lineup_id === lineupId || (single && !r.lineup_id)
+    const ms = (matches.data || []).filter(mine)
+    const ids = new Set(ms.map((x) => x.id))
     return {
       data: {
-        matches: matches.data || [], expenses: expenses.data || [], income: income.data || [], training: training.data || [],
-        stats: stats.data || [], roster: roster.data || [],
+        matches: ms, expenses: (expenses.data || []).filter(mine), income: (income.data || []).filter(mine),
+        training: (training.data || []).filter(mine),
+        stats: (stats.data || []).filter((x) => ids.has(x.match_id)), roster: roster.data || [],
       },
     }
-  }, [from, to])
+  }, [from, to, lineupId, single])
 
   // ---- numbers for the team report ------------------------------------------------
   const t = useMemo(() => {
@@ -137,6 +147,14 @@ export default function Reports() {
         <div className="flex flex-wrap items-end gap-3">
           <label><span className="label">From</span><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
           <label><span className="label">To</span><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+          {activeLineups.length > 0 && (
+            <label><span className="label">Report for</span>
+              <select className="input" value={lineupId} onChange={(e) => setLineupId(e.target.value)}>
+                <option value="all">{single ? 'Whole team' : 'Whole organization (all lineups)'}</option>
+                {activeLineups.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         <div className="flex gap-2">
           <button onClick={() => setView('team')} className={`btn btn-sm ${view === 'team' ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}><FileText size={14} /> Team report</button>
@@ -164,7 +182,7 @@ export default function Reports() {
                 <h2 className="font-display text-4xl font-bold tracking-wide text-white sm:text-5xl">
                   {first} {rest.length > 0 && <span className={RED}>{rest.join(' ')}</span>}
                 </h2>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">Team Performance Report • Season Overview</p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">Team Performance Report • {lineupLabel}</p>
               </div>
               <div className="min-w-[220px] rounded-lg border border-ink-600 bg-ink-900 p-4 text-xs">
                 <div className="mb-3 font-semibold uppercase tracking-[0.18em] text-slate-400">Reporting period</div>
@@ -258,7 +276,7 @@ export default function Reports() {
                 <h2 className="font-display text-4xl font-bold tracking-wide text-white sm:text-5xl">
                   {first} {rest.length > 0 && <span className={RED}>{rest.join(' ')}</span>}
                 </h2>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">Financial Report • Income &amp; Expenses</p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">Financial Report • {lineupId === 'all' ? 'Income & Expenses' : `${lineupLabel} — Income & Expenses`}</p>
               </div>
               <div className="min-w-[220px] rounded-lg border border-ink-600 bg-ink-900 p-4 text-xs">
                 <div className="mb-3 font-semibold uppercase tracking-[0.18em] text-slate-400">Reporting period</div>

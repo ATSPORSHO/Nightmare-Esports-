@@ -4,6 +4,8 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useAuth } from '../context/AuthContext'
+import { useLineup } from '../context/LineupContext'
+import LineupSelect from '../components/LineupSelect'
 import { useSettings } from '../context/SettingsContext'
 import { EXPENSE_CATEGORIES, INCOME_TYPES } from '../lib/constants'
 import { num, todayStr } from '../lib/format'
@@ -17,6 +19,9 @@ export default function Finance() {
   const { isAdmin } = useAuth()
   const { settings } = useSettings()
   const [params, setParams] = useSearchParams()
+  const { activeLineups, lineupName } = useLineup()
+  const multi = activeLineups.length > 1
+  const [lineupFilter, setLineupFilter] = useState('all')
   const [tab, setTab] = useState('expenses')
   const [editing, setEditing] = useState(null)
 
@@ -29,8 +34,9 @@ export default function Finance() {
 
   const isExp = tab === 'expenses'
   const cur = isExp ? exp : inc
-  const rows = cur.data || []
-  const total = (arr) => (arr || []).reduce((t, r) => t + Number(r.amount), 0)
+  const pick = (arr) => (arr || []).filter((r) => lineupFilter === 'all' || r.lineup_id === lineupFilter)
+  const rows = pick(cur.data)
+  const total = (arr) => pick(arr).reduce((t, r) => t + Number(r.amount), 0)
 
   const remove = async (r) => {
     if (!window.confirm('Delete this entry?')) return
@@ -52,21 +58,27 @@ export default function Finance() {
         <div className="card"><div className="text-xs text-slate-400">Net balance ({settings.currency})</div><div className="font-display text-3xl font-bold text-emerald-400">{num(total(inc.data) - total(exp.data))}</div></div>
       </div>
 
-      <div className="mb-3 flex gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {['expenses', 'income'].map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`btn btn-sm capitalize ${tab === t ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}>{t}</button>
         ))}
+        {multi && (
+          <select className="input !w-auto" value={lineupFilter} onChange={(e) => setLineupFilter(e.target.value)}>
+            <option value="all">All lineups</option>
+            {activeLineups.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        )}
       </div>
 
       <ErrorBox>{cur.error}</ErrorBox>
       <Card className="overflow-x-auto">
         {cur.loading ? <Spinner /> : (
           <table className="tbl">
-            <thead><tr><th>Date</th><th>{isExp ? 'Category' : 'Type'}</th><th>Description</th><th className="text-right">Amount ({settings.currency})</th>{isAdmin && <th />}</tr></thead>
+            <thead><tr><th>Date</th>{multi && <th>Lineup</th>}<th>{isExp ? 'Category' : 'Type'}</th><th>Description</th><th className="text-right">Amount ({settings.currency})</th>{isAdmin && <th />}</tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.spent_on || r.received_on}</td><td>{r.category || r.type}</td><td>{r.description}</td>
+                  <td>{r.spent_on || r.received_on}</td>{multi && <td>{lineupName(r.lineup_id)}</td>}<td>{r.category || r.type}</td><td>{r.description}</td>
                   <td className="text-right font-semibold text-white">{num(r.amount)}</td>
                   {isAdmin && (
                     <td className="text-right">
@@ -76,7 +88,7 @@ export default function Finance() {
                   )}
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={5} className="py-6 text-center text-slate-500">Nothing recorded yet.</td></tr>}
+              {!rows.length && <tr><td colSpan={6} className="py-6 text-center text-slate-500">Nothing recorded yet.</td></tr>}
             </tbody>
           </table>
         )}
@@ -91,7 +103,9 @@ export default function Finance() {
 
 function EntryForm({ kind, row, onClose, onSaved }) {
   const isExp = kind === 'expenses'
+  const { activeLineups } = useLineup()
   const [f, setF] = useState({
+    lineup_id: row.id ? (row.lineup_id || '') : (activeLineups[0]?.id || ''),
     date: row.spent_on || row.received_on || todayStr(),
     cat: row.category || row.type || (isExp ? EXPENSE_CATEGORIES[0] : INCOME_TYPES[0]),
     description: row.description || '',
@@ -105,8 +119,8 @@ function EntryForm({ kind, row, onClose, onSaved }) {
     e.preventDefault()
     setBusy(true); setErr('')
     const payload = isExp
-      ? { spent_on: f.date, category: f.cat, description: f.description, amount: Number(f.amount) }
-      : { received_on: f.date, type: f.cat, description: f.description, amount: Number(f.amount) }
+      ? { spent_on: f.date, category: f.cat, description: f.description, amount: Number(f.amount), lineup_id: f.lineup_id || null }
+      : { received_on: f.date, type: f.cat, description: f.description, amount: Number(f.amount), lineup_id: f.lineup_id || null }
     const q = supabase.from(kind)
     const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert(payload)
     setBusy(false)
@@ -125,6 +139,9 @@ function EntryForm({ kind, row, onClose, onSaved }) {
             </select>
           </Field>
         </div>
+        <Field label={isExp ? 'Which lineup is this cost for?' : 'Which lineup is this income for?'}>
+          <LineupSelect value={f.lineup_id} allowShared sharedLabel="Organization (shared)" onChange={(v) => setF({ ...f, lineup_id: v })} />
+        </Field>
         <Field label="Description"><input className="input" value={f.description} onChange={set('description')} /></Field>
         <Field label="Amount"><input className="input" type="number" min="0" step="any" required value={f.amount} onChange={set('amount')} /></Field>
         <ErrorBox>{err}</ErrorBox>

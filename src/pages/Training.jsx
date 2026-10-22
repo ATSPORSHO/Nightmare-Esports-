@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
+import { useLineup } from '../context/LineupContext'
+import LineupSelect from '../components/LineupSelect'
 import { DAYS, num, todayStr } from '../lib/format'
 import { Card, ErrorBox, Field, Modal, PageHeader, Spinner } from '../components/ui'
 
@@ -86,7 +88,8 @@ export default function Training() {
 }
 
 function SessionForm({ row, onClose, onSaved }) {
-  const [f, setF] = useState({ held_on: todayStr(), name: '', attendees: 5, total_players: 5, cost: 0, notes: '', ...row })
+  const { activeLineups } = useLineup()
+  const [f, setF] = useState({ lineup_id: row.id ? (row.lineup_id || '') : (activeLineups[0]?.id || ''), held_on: todayStr(), name: '', attendees: 5, total_players: 5, cost: 0, notes: '', ...row })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -95,7 +98,7 @@ function SessionForm({ row, onClose, onSaved }) {
     e.preventDefault()
     setBusy(true); setErr('')
     const payload = {
-      held_on: f.held_on, name: f.name, notes: f.notes || null,
+      held_on: f.held_on, name: f.name, notes: f.notes || null, lineup_id: f.lineup_id || null,
       attendees: Number(f.attendees) || 0, total_players: Number(f.total_players) || 0, cost: Number(f.cost) || 0,
     }
     const q = supabase.from('training_sessions')
@@ -115,6 +118,7 @@ function SessionForm({ row, onClose, onSaved }) {
           <Field label="Expected players"><input className="input" type="number" min="0" value={f.total_players} onChange={set('total_players')} /></Field>
           <Field label="Cost"><input className="input" type="number" min="0" step="any" value={f.cost} onChange={set('cost')} /></Field>
         </div>
+        <Field label="Lineup"><LineupSelect value={f.lineup_id} allowShared sharedLabel="Organization (all lineups)" onChange={(v) => setF({ ...f, lineup_id: v })} /></Field>
         <Field label="Notes"><input className="input" value={f.notes || ''} onChange={set('notes')} /></Field>
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">
