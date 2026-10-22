@@ -61,7 +61,7 @@ export default function QuickActionsAdmin() {
                   <div className="font-medium text-white">{a.label}</div>
                   <div className="text-xs text-slate-500">{a.target}</div>
                 </div>
-                <div className="flex gap-1">{a.roles.map((r) => <span key={r} className={r === 'admin' ? 'badge-accent' : 'badge-green'}>{r}</span>)}</div>
+                <div className="flex gap-1">{a.roles.map((r) => <span key={r} className={r === 'admin' ? 'badge-accent' : r === 'management' ? 'badge-amber' : 'badge-green'}>{r}</span>)}</div>
                 <label className="flex items-center gap-1.5 text-xs text-slate-400">
                   <input type="checkbox" checked={a.enabled} onChange={() => toggle(a)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> shown
                 </label>
@@ -122,7 +122,7 @@ function Form({ row, count, onClose, onSaved }) {
         <div>
           <span className="label">Who can see this button</span>
           <div className="flex gap-4 text-sm">
-            {['admin', 'player'].map((r) => (
+            {['admin', 'management', 'player'].map((r) => (
               <label key={r} className="flex items-center gap-2 capitalize">
                 <input type="checkbox" checked={f.roles.includes(r)} onChange={() => toggleRole(r)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> {r}s
               </label>

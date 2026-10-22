@@ -4,23 +4,29 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import { useAuth } from '../context/AuthContext'
+import { useLineup } from '../context/LineupContext'
+import LineupSelect from '../components/LineupSelect'
 import { MAPS } from '../lib/constants'
 import { todayStr } from '../lib/format'
 import { Card, ErrorBox, Field, Modal, PageHeader, Spinner } from '../components/ui'
 import UpcomingMatches from '../components/UpcomingMatches'
 import { matchPoints, placementPoints } from '../lib/points'
 
-const blank = () => ({ played_on: todayStr(), tournament: '', map: 'Erangel', placement: '', kills: 0, notes: '' })
+const blank = (lineup_id = '') => ({ lineup_id, played_on: todayStr(), tournament: '', map: 'Erangel', placement: '', kills: 0, notes: '' })
 
 export default function Matches() {
   const { isAdmin } = useAuth()
   const [params, setParams] = useSearchParams()
+  const { activeLineups, lineupName } = useLineup()
+  const multi = activeLineups.length > 1
+  const [filter, setFilter] = useState('all')
   const [editing, setEditing] = useState(null) // null | {} (new) | match
+  const newMatch = () => blank(activeLineups[0]?.id || '')
   const { data, loading, error, reload } = useData(() => supabase.from('matches').select('*').order('played_on', { ascending: false }))
-  const roster = useData(() => supabase.from('profiles').select('id, full_name, ign').eq('role', 'player').order('sort_order').order('created_at'))
+  const roster = useData(() => supabase.from('profiles').select('id, full_name, ign, lineup_id').eq('role', 'player').order('sort_order').order('created_at'))
 
   useEffect(() => {
-    if (isAdmin && params.get('new')) { setEditing(blank()); setParams({}, { replace: true }) }
+    if (isAdmin && params.get('new')) { setEditing(newMatch()); setParams({}, { replace: true }) }
   }, [params, isAdmin, setParams])
 
   const remove = async (m) => {
@@ -34,18 +40,27 @@ export default function Matches() {
       <PageHeader
         title="Match Results"
         subtitle="Tournament and scrim results."
-        actions={isAdmin && <button className="btn-primary" onClick={() => setEditing(blank())}><Plus size={16} /> Add match</button>}
+        actions={isAdmin && <button className="btn-primary" onClick={() => setEditing(newMatch())}><Plus size={16} /> Add match</button>}
       />
       <UpcomingMatches editable={isAdmin} />
       <ErrorBox>{error}</ErrorBox>
+      {multi && (
+        <div className="mb-3 flex items-center gap-2 text-sm">
+          <span className="text-slate-400">Show results of:</span>
+          <select className="input !w-auto" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">All lineups</option>
+            {activeLineups.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </div>
+      )}
       <Card className="overflow-x-auto">
         {loading ? <Spinner /> : (
           <table className="tbl">
-            <thead><tr><th>Date</th><th>Tournament</th><th>Map</th><th>Placement</th><th>Kills</th><th>Points</th><th>Notes</th>{isAdmin && <th />}</tr></thead>
+            <thead><tr><th>Date</th>{multi && <th>Lineup</th>}<th>Tournament</th><th>Map</th><th>Placement</th><th>Kills</th><th>Points</th><th>Notes</th>{isAdmin && <th />}</tr></thead>
             <tbody>
-              {(data || []).map((m) => (
+              {(data || []).filter((m) => filter === 'all' || m.lineup_id === filter).map((m) => (
                 <tr key={m.id}>
-                  <td>{m.played_on}</td><td className="font-medium text-white">{m.tournament}</td><td>{m.map}</td>
+                  <td>{m.played_on}</td>{multi && <td>{lineupName(m.lineup_id)}</td>}<td className="font-medium text-white">{m.tournament}</td><td>{m.map}</td>
                   <td>{m.placement ? `#${m.placement}` : '—'}</td><td>{m.kills}</td><td className="font-semibold text-white">{m.points}</td>
                   <td className="max-w-[240px] truncate">{m.notes}</td>
                   {isAdmin && (
@@ -56,7 +71,7 @@ export default function Matches() {
                   )}
                 </tr>
               ))}
-              {!data?.length && <tr><td colSpan={8} className="py-6 text-center text-slate-500">No matches yet.</td></tr>}
+              {!data?.length && <tr><td colSpan={9} className="py-6 text-center text-slate-500">No matches yet.</td></tr>}
             </tbody>
           </table>
         )}
@@ -66,12 +81,15 @@ export default function Matches() {
   )
 }
 
-function MatchForm({ match, roster, onClose, onSaved }) {
+function MatchForm({ match, roster: fullRoster, onClose, onSaved }) {
+  const { activeLineups } = useLineup()
   const [f, setF] = useState({ ...match })
   const [stats, setStats] = useState({}) // player_id -> { kills, points }
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  // only the players of the chosen lineup (with one lineup, players without a lineup count too)
+  const roster = fullRoster.filter((p) => !f.lineup_id || p.lineup_id === f.lineup_id || (activeLineups.length <= 1 && !p.lineup_id))
 
   useEffect(() => {
     if (!match.id) return
@@ -99,7 +117,7 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     e.preventDefault()
     setBusy(true); setErr('')
     const row = {
-      played_on: f.played_on, tournament: f.tournament, map: f.map, notes: f.notes || null,
+      lineup_id: f.lineup_id || null, played_on: f.played_on, tournament: f.tournament, map: f.map, notes: f.notes || null,
       placement: f.placement === '' ? null : Number(f.placement), points: totalPts, kills: Number(f.kills) || 0,
     }
     let id = match.id
@@ -129,6 +147,9 @@ function MatchForm({ match, roster, onClose, onSaved }) {
     <Modal title={match.id ? 'Edit match' : 'Add match'} onClose={onClose} wide>
       <form onSubmit={save} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Lineup (this result shows on that lineup's dashboard)">
+            <LineupSelect value={f.lineup_id} onChange={(v) => setF({ ...f, lineup_id: v })} />
+          </Field>
           <Field label="Date"><input className="input" type="date" required value={f.played_on} onChange={set('played_on')} /></Field>
           <Field label="Tournament / Scrim"><input className="input" required value={f.tournament} onChange={set('tournament')} placeholder="PMPL SEA" /></Field>
           <Field label="Map">

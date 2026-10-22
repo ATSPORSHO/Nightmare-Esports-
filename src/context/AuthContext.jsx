@@ -5,7 +5,8 @@ const AuthCtx = createContext(null)
 export const useAuth = () => useContext(AuthCtx)
 
 /**
- * role is one of:  'admin' | 'player' | 'guest'
+ * role is one of:  'admin' | 'management' | 'player' | 'guest'
+ *   management = staff, view-only access to everything (no editing)
  *   guest  = nobody logged in (dashboard view only)
  *   player = account created by the admin (view everything, submit screenshots)
  *   admin  = full control
@@ -44,6 +45,7 @@ export function AuthProvider({ children }) {
     profile,
     role,
     isAdmin: role === 'admin',
+    isManagement: role === 'management',
     isMember: role !== 'guest',
     loading,
     refreshProfile: () => session?.user?.id && loadProfile(session.user.id),

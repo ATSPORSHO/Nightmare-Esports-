@@ -96,7 +96,7 @@ export default function Layout() {
                   <Avatar name={profile?.ign || profile?.full_name} url={profile?.avatar_url} size={32} />
                   <div className="hidden text-left sm:block">
                     <div className="text-sm font-semibold leading-tight text-white">{profile?.ign || profile?.full_name || 'Account'}</div>
-                    <div className="text-[11px] capitalize text-slate-400">{role === 'admin' ? 'Administrator' : 'Player'}</div>
+                    <div className="text-[11px] capitalize text-slate-400">{role === 'admin' ? 'Administrator' : role === 'management' ? 'Management' : 'Player'}</div>
                   </div>
                   <ChevronDown size={14} className="text-slate-400" />
                 </button>

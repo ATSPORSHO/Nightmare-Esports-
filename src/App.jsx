@@ -69,13 +69,13 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="lineup/:slug" element={<Dashboard />} />
               <Route path="dashboard" element={<Navigate to="/" replace />} />
-              <Route path="players" element={<Guard roles={['admin', 'player']}><Players /></Guard>} />
-              <Route path="matches" element={<Guard roles={['admin', 'player']}><Matches /></Guard>} />
-              <Route path="finance" element={<Guard roles={['admin', 'player']}><Finance /></Guard>} />
-              <Route path="training" element={<Guard roles={['admin', 'player']}><Training /></Guard>} />
-              <Route path="reports" element={<Guard roles={['admin', 'player']}><Reports /></Guard>} />
+              <Route path="players" element={<Guard roles={['admin', 'management', 'player']}><Players /></Guard>} />
+              <Route path="matches" element={<Guard roles={['admin', 'management', 'player']}><Matches /></Guard>} />
+              <Route path="finance" element={<Guard roles={['admin', 'management', 'player']}><Finance /></Guard>} />
+              <Route path="training" element={<Guard roles={['admin', 'management', 'player']}><Training /></Guard>} />
+              <Route path="reports" element={<Guard roles={['admin', 'management', 'player']}><Reports /></Guard>} />
               <Route path="submit/:kind" element={<Guard roles={['admin', 'player']}><Submit /></Guard>} />
-              <Route path="profile" element={<Guard roles={['admin', 'player']}><Profile /></Guard>} />
+              <Route path="profile" element={<Guard roles={['admin', 'management', 'player']}><Profile /></Guard>} />
               <Route path="admin" element={<Guard roles={['admin']}><Admin /></Guard>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

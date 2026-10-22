@@ -3,6 +3,7 @@ import { UserPlus, Pencil, KeyRound, Trash2, Copy, ArrowUp, ArrowDown } from 'lu
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { useSettings } from '../../context/SettingsContext'
+import { useAuth } from '../../context/AuthContext'
 import { PLAYER_ROLES } from '../../lib/constants'
 import { num } from '../../lib/format'
 import { movePlayer } from '../../lib/roster'
@@ -43,8 +44,8 @@ export default function PlayersAdmin() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-400">Create a player here and their name, e-mail, phone, IGN and UID are saved into the Players dashboard automatically.</p>
-        <button className="btn-primary" onClick={() => setModal({ type: 'create' })}><UserPlus size={16} /> Create player account</button>
+        <p className="text-sm text-slate-400">Create a Player, Admin or Management account. Player details (name, e-mail, phone, IGN, UID) are saved into the Players dashboard automatically.</p>
+        <button className="btn-primary" onClick={() => setModal({ type: 'create' })}><UserPlus size={16} /> Create account</button>
       </div>
 
       {created && (
@@ -79,7 +80,7 @@ export default function PlayersAdmin() {
                   <td>{p.full_name}</td>
                   <td>{p.ign}</td><td>{p.game_uid}</td><td>{p.player_role}</td><td>{p.phone}</td><td>{p.email}</td>
                   <td><StatusBadge status={p.status} /></td><td className="text-right">{num(p.monthly_salary)}</td>
-                  <td><span className={p.role === 'admin' ? 'badge-accent' : 'badge-green'}>{p.role}</span></td>
+                  <td><span className={p.role === 'admin' ? 'badge-accent' : p.role === 'management' ? 'badge-amber' : 'badge-green'}>{p.role}</span></td>
                   <td className="whitespace-nowrap text-right">
                     <button title="Edit" className="btn-ghost btn-sm mr-1" onClick={() => setModal({ type: 'edit', player: p })}><Pencil size={13} /></button>
                     <button title="Reset password" className="btn-ghost btn-sm mr-1" onClick={() => setModal({ type: 'password', player: p })}><KeyRound size={13} /></button>
@@ -119,34 +120,76 @@ function PlayerFields({ f, set }) {
   )
 }
 
+const ACCOUNT_TYPES = [
+  { key: 'player', label: 'Player', desc: 'Plays for a lineup. Can view the site and upload screenshots.' },
+  { key: 'admin', label: 'Admin', desc: 'Full control: edits everything and manages accounts.' },
+  { key: 'management', label: 'Management', desc: 'Staff with view-only access to everything (players, matches, finance, reports). Cannot change anything.' },
+]
+
+function StaffFields({ f, set }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Full name"><input className="input" required value={f.full_name} onChange={set('full_name')} /></Field>
+      <Field label="Phone number (optional)"><input className="input" value={f.phone} onChange={set('phone')} /></Field>
+      <Field label="Position / title (optional)"><input className="input" value={f.title} onChange={set('title')} placeholder="Manager, Coach, Analyst…" /></Field>
+    </div>
+  )
+}
+
 function CreateForm({ onClose, onCreated }) {
   const { activeLineups } = useLineup()
-  const [f, setF] = useState({ lineup_id: activeLineups[0]?.id || '', avatar_url: null, full_name: '', ign: '', game_uid: '', phone: '', player_role: PLAYER_ROLES[0], monthly_salary: 0, email: '', password: randomPassword() })
+  const [kind, setKind] = useState('player')
+  const [f, setF] = useState({ lineup_id: activeLineups[0]?.id || '', avatar_url: null, full_name: '', ign: '', game_uid: '', phone: '', title: '', player_role: PLAYER_ROLES[0], monthly_salary: 0, email: '', password: randomPassword() })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const isPlayer = kind === 'player'
 
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
-    const { lineup_id, avatar_url, ...rest } = f
-    const r = await callFn({ action: 'create', ...rest, email: f.email.trim(), monthly_salary: Number(f.monthly_salary) || 0 })
+    const { lineup_id, avatar_url, title, ...rest } = f
+    const body = isPlayer
+      ? { ...rest, monthly_salary: Number(f.monthly_salary) || 0 }
+      : { full_name: f.full_name, phone: f.phone, ign: '', game_uid: '', player_role: title, monthly_salary: 0, password: f.password }
+    const r = await callFn({ action: 'create', ...body, email: f.email.trim() })
     if (r.error) { setBusy(false); return setErr(r.error) }
     const extra = {}
-    if (lineup_id) extra.lineup_id = lineup_id
+    if (!isPlayer) extra.role = kind
+    if (isPlayer && lineup_id) extra.lineup_id = lineup_id
     if (avatar_url) extra.avatar_url = avatar_url
-    if (r.profile?.id && Object.keys(extra).length) await supabase.from('profiles').update(extra).eq('id', r.profile.id)
+    if (r.profile?.id && Object.keys(extra).length) {
+      const u = await supabase.from('profiles').update(extra).eq('id', r.profile.id)
+      if (u.error) { setBusy(false); return setErr(`Account created, but the type could not be saved: ${u.error.message}. Did you run the account-types SQL?`) }
+    }
     setBusy(false)
     onCreated({ email: f.email.trim(), password: f.password })
   }
 
   return (
-    <Modal title="Create player account" onClose={onClose} wide>
+    <Modal title="Create account" onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-3">
-        <PlayerFields f={f} set={set} />
-        <Field label="Lineup" hint="Which team this player belongs to.">
-          <LineupSelect value={f.lineup_id} onChange={(v) => setF({ ...f, lineup_id: v })} />
-        </Field>
+        <div>
+          <span className="label">Account type</span>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {ACCOUNT_TYPES.map((t) => (
+              <button key={t.key} type="button" onClick={() => setKind(t.key)}
+                className={`rounded-lg border p-3 text-left transition ${kind === t.key ? 'border-accent bg-accent/15' : 'border-ink-600 bg-ink-850 hover:bg-ink-800'}`}>
+                <div className="text-sm font-semibold text-white">{t.label}</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{t.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isPlayer ? (
+          <>
+            <PlayerFields f={f} set={set} />
+            <Field label="Lineup" hint="Which team this player belongs to.">
+              <LineupSelect value={f.lineup_id} onChange={(v) => setF({ ...f, lineup_id: v })} />
+            </Field>
+          </>
+        ) : <StaffFields f={f} set={set} />}
         <ImageField label="Profile picture (optional)" folder="player" value={f.avatar_url} onChange={(v) => setF({ ...f, avatar_url: v })} hint="Shown on the home page lineup." />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Login e-mail (Gmail)"><input className="input" type="email" required value={f.email} onChange={set('email')} /></Field>
@@ -157,7 +200,7 @@ function CreateForm({ onClose, onCreated }) {
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
+          <button className="btn-primary" disabled={busy}>{busy ? 'Creating…' : `Create ${ACCOUNT_TYPES.find((t) => t.key === kind).label.toLowerCase()} account`}</button>
         </div>
       </form>
     </Modal>
@@ -165,6 +208,8 @@ function CreateForm({ onClose, onCreated }) {
 }
 
 function EditForm({ player, onClose, onSaved }) {
+  const { profile: me } = useAuth()
+  const isSelf = me?.id === player.id
   const [f, setF] = useState({ ...player, phone: player.phone || '', ign: player.ign || '', game_uid: player.game_uid || '', player_role: player.player_role || PLAYER_ROLES[0] })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -179,7 +224,7 @@ function EditForm({ player, onClose, onSaved }) {
     }
     const { error } = await supabase.from('profiles').update({
       full_name: f.full_name, ign: f.ign, game_uid: f.game_uid, phone: f.phone, player_role: f.player_role,
-      monthly_salary: Number(f.monthly_salary) || 0, status: f.status, lineup_id: f.lineup_id || null, avatar_url: f.avatar_url || null,
+      monthly_salary: Number(f.monthly_salary) || 0, status: f.status, lineup_id: f.lineup_id || null, avatar_url: f.avatar_url || null, role: f.role,
     }).eq('id', player.id)
     setBusy(false)
     if (error) return setErr(error.message)
@@ -190,7 +235,14 @@ function EditForm({ player, onClose, onSaved }) {
     <Modal title={`Edit ${player.full_name}`} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-3">
         <PlayerFields f={f} set={set} />
-        <Field label="Lineup"><LineupSelect value={f.lineup_id} allowShared sharedLabel="No lineup" onChange={(v) => setF({ ...f, lineup_id: v })} /></Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Account type" hint={isSelf ? 'You cannot change your own account type.' : undefined}>
+            <select className="input" value={f.role} disabled={isSelf} onChange={set('role')}>
+              <option value="player">Player</option><option value="admin">Admin</option><option value="management">Management</option>
+            </select>
+          </Field>
+          <Field label="Lineup"><LineupSelect value={f.lineup_id} allowShared sharedLabel="No lineup" onChange={(v) => setF({ ...f, lineup_id: v })} /></Field>
+        </div>
         <ImageField label="Profile picture" folder="player" value={f.avatar_url} onChange={(v) => setF({ ...f, avatar_url: v })} hint="Shown on the home page lineup." />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Login e-mail"><input className="input" type="email" required value={f.email || ''} onChange={set('email')} /></Field>
