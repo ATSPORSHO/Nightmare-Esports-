@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import {
   Swords, Crosshair, Trophy, Wallet, PiggyBank, TrendingUp, TrendingDown, PieChart as PieIcon, CalendarCheck, Users, Dumbbell, Receipt, Banknote, Activity, CheckCircle2, Quote, LineChart,
 } from 'lucide-react'
@@ -7,10 +7,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
+import { useLineup } from '../context/LineupContext'
 import { addDays, daysBetween, num, pctChange, timeAgo, todayStr } from '../lib/format'
-import { Card, Avatar, Spinner, StatusBadge } from '../components/ui'
+import { Card, Spinner, StatusBadge } from '../components/ui'
 import { Donut, Legend, Ring } from '../components/charts'
 import { Icon } from '../lib/icons'
+import UpcomingMatches from '../components/UpcomingMatches'
 
 const PRESETS = [
   { key: '7', label: 'Last 7 days' },
@@ -28,33 +30,36 @@ function rangeFor(key) {
 }
 
 /* ------------------------------------------------------------------ */
-function useDashboardData(role, financeAllowed) {
+function useDashboardData(role, financeAllowed, lineup, single) {
   const [d, setD] = useState(null)
   useEffect(() => {
     let alive = true
     ;(async () => {
       const member = role !== 'guest'
-      const [matches, stats, roster, training, expenses, income, updates] = await Promise.all([
+      const [matches, stats, roster, training, expenses, income] = await Promise.all([
         supabase.from('matches').select('*').order('played_on', { ascending: false }),
         supabase.from('match_player_stats').select('match_id, player_id, kills, points'),
         member
-          ? supabase.from('profiles').select('id, full_name, ign, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('created_at')
-          : supabase.from('public_roster').select('*'),
+          ? supabase.from('profiles').select('id, full_name, ign, game_uid, player_role, status, avatar_url, monthly_salary, lineup_id').eq('role', 'player').order('sort_order').order('created_at')
+          : supabase.from('public_roster').select('*').order('sort_order'),
         supabase.from('training_sessions')
-          .select(member ? '*' : 'id, held_on, name, attendees, total_players')
+          .select(member ? '*' : 'id, held_on, name, attendees, total_players, lineup_id')
           .order('held_on', { ascending: false }),
         financeAllowed ? supabase.from('expenses').select('*').order('spent_on', { ascending: false }) : Promise.resolve({ data: [] }),
         financeAllowed ? supabase.from('income').select('*').order('received_on', { ascending: false }) : Promise.resolve({ data: [] }),
-        supabase.from('updates').select('*').order('created_at', { ascending: false }).limit(5),
       ])
       if (!alive) return
+      // show only this lineup (with one lineup, rows without a lineup belong to it)
+      const mine = (r) => !lineup || r.lineup_id === lineup.id || (single && !r.lineup_id)
+      const ms = (matches.data || []).filter(mine)
+      const ids = new Set(ms.map((x) => x.id))
       setD({
-        matches: matches.data || [], stats: stats.data || [], roster: roster.data || [],
-        training: training.data || [], expenses: expenses.data || [], income: income.data || [], updates: updates.data || [],
+        matches: ms, stats: (stats.data || []).filter((x) => ids.has(x.match_id)), roster: (roster.data || []).filter(mine),
+        training: (training.data || []).filter(mine), expenses: (expenses.data || []).filter(mine), income: (income.data || []).filter(mine),
       })
     })()
     return () => { alive = false }
-  }, [role, financeAllowed])
+  }, [role, financeAllowed, lineup?.id, single])
   return d
 }
 
@@ -81,10 +86,13 @@ function StatCard({ icon: IconC, label, value, change, color }) {
 
 /* ------------------------------------------------------------------ */
 export default function Dashboard() {
-  const { role, isMember } = useAuth()
+  const { role, isMember, profile } = useAuth()
   const { settings } = useSettings()
   const financeAllowed = isMember || settings.guest_show_finance
-  const data = useDashboardData(role, financeAllowed)
+  const { slug } = useParams()
+  const { activeLineups } = useLineup()
+  const lineup = activeLineups.find((l) => l.slug === slug) || null
+  const data = useDashboardData(role, financeAllowed, lineup, activeLineups.length <= 1)
   const [preset, setPreset] = useState('30')
   const [actions, setActions] = useState([])
 
@@ -130,10 +138,10 @@ export default function Dashboard() {
       agg[s.player_id].kills += s.kills
       agg[s.player_id].points += s.points
     })
-   const top = Object.entries(agg)
-  .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
-  .filter((x) => x.p)
-  .sort((a, b) => b.kills - a.kills || b.points - a.points).slice(0, 5)
+    const top = Object.entries(agg)
+      .map(([id, v]) => ({ ...v, p: data.roster.find((r) => r.id === id) }))
+      .filter((x) => x.p)
+      .sort((a, b) => b.kills - a.kills || b.points - a.points).slice(0, 5)
 
     // training
     const sessions = data.training.filter((x) => inR(x.held_on))
@@ -165,6 +173,17 @@ export default function Dashboard() {
     }
   }, [data, start, end, len, prevStart, prevEnd])
 
+  // unknown or hidden lineup (e.g. not public): never fall back to showing everything
+  if (slug && !lineup) {
+    return activeLineups.length ? <Navigate to="/" replace /> : <div className="flex justify-center py-24"><Spinner /></div>
+  }
+
+  // a player only sees their own lineup's dashboard
+  if (role === 'player' && lineup && profile?.lineup_id && profile.lineup_id !== lineup.id) {
+    const own = activeLineups.find((l) => l.id === profile.lineup_id)
+    return <Navigate to={own ? `/lineup/${own.slug}` : '/'} replace />
+  }
+
   if (role === 'guest' && !settings.guest_enabled) {
     return (
       <div className="mx-auto mt-16 max-w-md text-center">
@@ -185,7 +204,8 @@ export default function Dashboard() {
       {/* title + date range */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">Dashboard</h1>
+          <Link to="/" className="text-xs font-semibold text-red-400 hover:text-red-300">← Back to home</Link>
+          <h1 className="font-display text-3xl font-bold text-white">{lineup ? `${lineup.name} — Dashboard` : 'Dashboard'}</h1>
           <p className="text-sm text-slate-400">{settings.dashboard_subtitle}</p>
         </div>
         <select className="input !w-auto" value={preset} onChange={(e) => setPreset(e.target.value)}>
@@ -197,10 +217,10 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-4">
           {/* stat cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5">
-            <StatCard icon={Swords} color="#6d8bff" label="Total Matches" value={num(m.matches.length)} change={m.change.matches} />
-            <StatCard icon={Crosshair} color="#38bdf8" label="Total Kills" value={num(m.kills)} change={m.change.kills} />
+            <StatCard icon={Swords} color="#ff5a67" label="Total Matches" value={num(m.matches.length)} change={m.change.matches} />
+            <StatCard icon={Crosshair} color="#ff7a45" label="Total Kills" value={num(m.kills)} change={m.change.kills} />
             <StatCard icon={Trophy} color="#f5a524" label="Total Points" value={num(m.points)} change={m.change.points} />
-            {financeAllowed && <StatCard icon={Wallet} color="#8b7bff" label={`Total Income (${cur})`} value={num(m.totalIncome)} change={m.change.income} />}
+            {financeAllowed && <StatCard icon={Wallet} color="#ff5a67" label={`Total Income (${cur})`} value={num(m.totalIncome)} change={m.change.income} />}
             {financeAllowed && <StatCard icon={PiggyBank} color="#f472b6" label={`Net Balance (${cur})`} value={num(net)} change={m.change.net} />}
           </div>
 
@@ -212,15 +232,15 @@ export default function Dashboard() {
                   <BarChart data={m.weeks} margin={{ top: 18, right: 4, left: -22, bottom: 0 }}>
                     <defs>
                       <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7c5cff" /><stop offset="100%" stopColor="#4326d9" />
+                        <stop offset="0%" stopColor="#e11d2e" /><stop offset="100%" stopColor="#7f0d1a" />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#1b2558" vertical={false} />
+                    <CartesianGrid stroke="#94a3b8" strokeOpacity={0.25} vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} contentStyle={{ background: '#0a1030', border: '1px solid #27336f', borderRadius: 8 }} />
+                    <Tooltip cursor={{ fill: 'rgba(148,163,184,.12)' }} contentStyle={{ background: 'rgb(var(--ink-900))', color: 'rgb(var(--c-white))', border: '1px solid rgb(var(--ink-600))', borderRadius: 8 }} />
                     <Bar dataKey="points" fill="url(#bar)" radius={[3, 3, 0, 0]} maxBarSize={34}>
-                      <LabelList dataKey="points" position="top" fill="#cbd5e1" fontSize={11} />
+                      <LabelList dataKey="points" position="top" fill="#64748b" fontSize={11} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -255,27 +275,21 @@ export default function Dashboard() {
 
           {/* tables row 1 */}
           <div className={`grid gap-4 ${financeAllowed ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
-          <Card title="Top Players" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
-  <table className="tbl">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>IGN</th>
-        <th>Kills</th>
-      </tr>
-    </thead>
-    <tbody>
-      {m.top.map((t, i) => (
-        <tr key={t.p.id}>
-          <td>{i + 1}</td>
-          <td>{t.p.ign}</td>
-          <td className="font-semibold text-white">{t.kills}</td>
-        </tr>
-      ))}
-      {!m.top.length && <tr><td colSpan={3} className="text-center text-slate-500">No player stats in this period</td></tr>}
-    </tbody>
-  </table>
-</Card>
+            <Card title="Top Players by Kills" icon={Trophy} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
+              <table className="tbl">
+                <thead><tr><th>#</th><th>IGN</th><th className="text-right">Kills</th></tr></thead>
+                <tbody>
+                  {m.top.map((t, i) => (
+                    <tr key={t.p.id}>
+                      <td>{i + 1}</td>
+                      <td><span className="font-semibold text-white">{t.p.ign || t.p.full_name}</span></td>
+                      <td className="text-right font-semibold text-white">{t.kills}</td>
+                    </tr>
+                  ))}
+                  {!m.top.length && <tr><td colSpan={3} className="text-center text-slate-500">No player stats in this period</td></tr>}
+                </tbody>
+              </table>
+            </Card>
 
             {financeAllowed && (
               <Card title="Recent Expenses" icon={Receipt} link={isMember ? '/finance' : undefined} className="min-w-0 overflow-x-auto">
@@ -311,18 +325,17 @@ export default function Dashboard() {
             <Card title="Player Roster" icon={Users} link={isMember ? '/players' : undefined} className="min-w-0 overflow-x-auto">
               <table className="tbl">
                 <thead>
-                  <tr><th>#</th><th>Player</th><th>IGN</th><th>Role</th><th>Status</th>{isMember && <th className="text-right">Salary ({cur})</th>}</tr>
+                  <tr><th>#</th><th>IGN</th><th>UID</th></tr>
                 </thead>
                 <tbody>
                   {data.roster.slice(0, 5).map((p, i) => (
                     <tr key={p.id}>
                       <td>{i + 1}</td>
-                      <td><span className="flex items-center gap-2"><Avatar name={p.full_name} url={p.avatar_url} size={24} />{p.full_name}</span></td>
-                      <td>{p.ign}</td><td>{p.player_role}</td><td><StatusBadge status={p.status} /></td>
-                      {isMember && <td className="text-right">{num(p.monthly_salary)}</td>}
+                      <td className="font-semibold text-white">{p.ign || p.full_name}</td>
+                      <td>{p.game_uid || '—'}</td>
                     </tr>
                   ))}
-                  {!data.roster.length && <tr><td colSpan={6} className="text-center text-slate-500">No players yet</td></tr>}
+                  {!data.roster.length && <tr><td colSpan={3} className="text-center text-slate-500">No players yet</td></tr>}
                 </tbody>
               </table>
             </Card>
@@ -360,25 +373,27 @@ export default function Dashboard() {
                     <AreaChart data={m.trend} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                       <defs>
                         <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#7c5cff" stopOpacity={0.5} /><stop offset="100%" stopColor="#7c5cff" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#e11d2e" stopOpacity={0.5} /><stop offset="100%" stopColor="#e11d2e" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="d" hide />
-                      <Tooltip contentStyle={{ background: '#0a1030', border: '1px solid #27336f', borderRadius: 8, fontSize: 12 }} />
-                      <Area type="monotone" dataKey="net" stroke="#8b7bff" strokeWidth={2} fill="url(#area)" />
+                      <Tooltip contentStyle={{ background: 'rgb(var(--ink-900))', color: 'rgb(var(--c-white))', border: '1px solid rgb(var(--ink-600))', borderRadius: 8, fontSize: 12 }} />
+                      <Area type="monotone" dataKey="net" stroke="#ff5a67" strokeWidth={2} fill="url(#area)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
                 {isMember && <div className="mt-1 text-[11px] text-slate-500">Monthly salary commitment: {num(rosterTotalSalary)} {cur}</div>}
               </Card>
-            ) : (
-              <Card title="Latest Updates" icon={Activity}><Updates items={data.updates} /></Card>
-            )}
+            ) : null}
           </div>
         </div>
 
         {/* right column */}
         <div className="space-y-4">
+          <Card title="Upcoming Matches" icon={CalendarCheck} link={isMember ? '/matches' : undefined}>
+            <UpcomingMatches bare limit={4} lineup={lineup} />
+          </Card>
+
           {financeAllowed && (
             <Card title="Recent Matches" icon={Swords} link={isMember ? '/matches' : undefined}>
               <RecentMatches matches={data.matches} />
@@ -404,14 +419,12 @@ export default function Dashboard() {
             </Card>
           )}
 
-          {financeAllowed && <Card title="Latest Updates" icon={Activity}><Updates items={data.updates} /></Card>}
-
           {settings.quote_text && (
             <div className="card flex items-center gap-3 border-accent/40 bg-gradient-to-br from-accent/20 to-ink-900">
               {settings.logo_url ? <img src={settings.logo_url} alt="" className="h-14 w-14 object-contain" /> : <Quote className="text-accent" />}
               <div>
                 <div className="text-sm font-medium text-white">{settings.quote_text}</div>
-                {settings.quote_author && <div className="mt-1 text-xs text-violet-300">– {settings.quote_author}</div>}
+                {settings.quote_author && <div className="mt-1 text-xs text-red-300">– {settings.quote_author}</div>}
               </div>
             </div>
           )}
@@ -441,24 +454,5 @@ function RecentMatches({ matches }) {
       ))}
       {!matches.length && <div className="py-4 text-center text-sm text-slate-500">No matches yet</div>}
     </div>
-  )
-}
-
-function Updates({ items }) {
-  if (!items.length) return <div className="py-3 text-center text-sm text-slate-500">No updates yet</div>
-  return (
-    <ul className="space-y-3">
-      {items.map((u) => (
-        <li key={u.id} className="flex items-start gap-3">
-          <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-400" />
-          <div className="min-w-0 flex-1">
-            <div className="flex justify-between gap-2 text-[13px] font-medium text-white">
-              <span>{u.message}</span><span className="shrink-0 text-[10px] font-normal text-slate-500">{timeAgo(u.created_at)}</span>
-            </div>
-            {u.detail && <div className="truncate text-[11px] text-slate-500">{u.detail}</div>}
-          </div>
-        </li>
-      ))}
-    </ul>
   )
 }
