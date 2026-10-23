@@ -6,6 +6,64 @@
   --accent: 200 16 46;
 }
 
+/* ---------- LIGHT theme (default) ---------- */
+:root, :root[data-theme='light'] {
+  --c-white: 17 24 39;            /* "white" text = near-black on light pages */
+  --ink-950: 244 245 248;         /* page background */
+  --ink-900: 255 255 255;         /* cards, header */
+  --ink-850: 249 250 251;         /* inputs */
+  --ink-800: 241 243 246;
+  --ink-700: 226 229 235;         /* borders */
+  --ink-600: 208 213 222;
+  --slate-200: 31 41 55;
+  --slate-300: 55 65 81;
+  --slate-400: 94 106 125;
+  --slate-500: 107 114 128;
+  --slate-600: 148 163 184;
+  --red-100: 127 29 29;
+  --red-200: 153 27 27;
+  --red-300: 185 28 28;
+  --red-400: 200 16 46;
+  --red-700: 252 165 165;
+  --red-900: 252 165 165;
+  --red-950: 254 226 226;
+  --amber-100: 120 53 15;
+  --amber-300: 180 83 9;
+  --emerald-300: 4 120 87;
+  --emerald-400: 5 150 105;
+}
+
+/* ---------- DARK theme (blood red & black). Also used inside .dark-scope areas ---------- */
+:root[data-theme='dark'], .dark-scope, .report-sheet {
+  --c-white: 255 255 255;
+  --ink-950: 7 4 5;
+  --ink-900: 14 8 9;
+  --ink-850: 20 11 12;
+  --ink-800: 28 14 16;
+  --ink-700: 42 18 20;
+  --ink-600: 67 28 32;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --red-100: 254 226 226;
+  --red-200: 254 202 202;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --red-700: 185 28 28;
+  --red-900: 127 29 29;
+  --red-950: 69 10 10;
+  --amber-100: 254 243 199;
+  --amber-300: 252 211 77;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+}
+.dark-scope, .report-sheet { color: rgb(226 232 240); }
+
+/* text on coloured (accent / red) buttons stays white in both themes */
+.bg-accent, .btn-primary, .btn-danger, .bg-red-600, .bg-red-500, .bg-red-600\/90 { --c-white: 255 255 255; }
+
 html, body, #root { min-height: 100%; }
 
 body {
@@ -26,9 +84,9 @@ body {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .btn-primary { @apply btn bg-accent text-white hover:brightness-110; }
+  .btn-primary { @apply btn bg-accent hover:brightness-110; color: #fff; }
   .btn-ghost   { @apply btn border border-ink-600 bg-ink-800/60 text-slate-200 hover:bg-ink-700; }
-  .btn-danger  { @apply btn bg-red-600/90 text-white hover:bg-red-500; }
+  .btn-danger  { @apply btn bg-red-600/90 hover:bg-red-500; color: #fff; }
   .btn-sm      { @apply px-2.5 py-1.5 text-xs; }
   .input {
     @apply w-full rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-accent focus:ring-1 focus:ring-accent;

@@ -13,7 +13,7 @@ export function Donut({ items, center, sub, size = 170, inner = 0.62 }) {
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie data={data} dataKey="value" innerRadius={`${inner * 100}%`} outerRadius="100%" stroke="none" paddingAngle={items.length > 1 ? 2 : 0}>
-            {data.map((d, i) => <Cell key={d.name} fill={items.length ? colorFor(d.name, i) : '#2a1214'} />)}
+            {data.map((d, i) => <Cell key={d.name} fill={items.length ? colorFor(d.name, i) : '#94a3b8'} />)}
           </Pie>
         </PieChart>
       </ResponsiveContainer>

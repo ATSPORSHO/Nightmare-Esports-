@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import {
   Swords, Crosshair, Trophy, Wallet, PiggyBank, TrendingUp, TrendingDown, PieChart as PieIcon, CalendarCheck, Users, Dumbbell, Receipt, Banknote, Activity, CheckCircle2, Quote, LineChart,
 } from 'lucide-react'
@@ -40,10 +40,10 @@ function useDashboardData(role, financeAllowed, lineup, single) {
         supabase.from('matches').select('*').order('played_on', { ascending: false }),
         supabase.from('match_player_stats').select('match_id, player_id, kills, points'),
         member
-          ? supabase.from('profiles').select('id, full_name, ign, game_uid, player_role, status, avatar_url, monthly_salary').eq('role', 'player').order('sort_order').order('created_at')
+          ? supabase.from('profiles').select('id, full_name, ign, game_uid, player_role, status, avatar_url, monthly_salary, lineup_id').eq('role', 'player').order('sort_order').order('created_at')
           : supabase.from('public_roster').select('*').order('sort_order'),
         supabase.from('training_sessions')
-          .select(member ? '*' : 'id, held_on, name, attendees, total_players')
+          .select(member ? '*' : 'id, held_on, name, attendees, total_players, lineup_id')
           .order('held_on', { ascending: false }),
         financeAllowed ? supabase.from('expenses').select('*').order('spent_on', { ascending: false }) : Promise.resolve({ data: [] }),
         financeAllowed ? supabase.from('income').select('*').order('received_on', { ascending: false }) : Promise.resolve({ data: [] }),
@@ -55,7 +55,7 @@ function useDashboardData(role, financeAllowed, lineup, single) {
       const ids = new Set(ms.map((x) => x.id))
       setD({
         matches: ms, stats: (stats.data || []).filter((x) => ids.has(x.match_id)), roster: (roster.data || []).filter(mine),
-        training: training.data || [], expenses: expenses.data || [], income: income.data || [],
+        training: (training.data || []).filter(mine), expenses: (expenses.data || []).filter(mine), income: (income.data || []).filter(mine),
       })
     })()
     return () => { alive = false }
@@ -86,7 +86,7 @@ function StatCard({ icon: IconC, label, value, change, color }) {
 
 /* ------------------------------------------------------------------ */
 export default function Dashboard() {
-  const { role, isMember } = useAuth()
+  const { role, isMember, profile } = useAuth()
   const { settings } = useSettings()
   const financeAllowed = isMember || settings.guest_show_finance
   const { slug } = useParams()
@@ -173,6 +173,17 @@ export default function Dashboard() {
     }
   }, [data, start, end, len, prevStart, prevEnd])
 
+  // unknown or hidden lineup (e.g. not public): never fall back to showing everything
+  if (slug && !lineup) {
+    return activeLineups.length ? <Navigate to="/" replace /> : <div className="flex justify-center py-24"><Spinner /></div>
+  }
+
+  // a player only sees their own lineup's dashboard
+  if (role === 'player' && lineup && profile?.lineup_id && profile.lineup_id !== lineup.id) {
+    const own = activeLineups.find((l) => l.id === profile.lineup_id)
+    return <Navigate to={own ? `/lineup/${own.slug}` : '/'} replace />
+  }
+
   if (role === 'guest' && !settings.guest_enabled) {
     return (
       <div className="mx-auto mt-16 max-w-md text-center">
@@ -224,12 +235,12 @@ export default function Dashboard() {
                         <stop offset="0%" stopColor="#e11d2e" /><stop offset="100%" stopColor="#7f0d1a" />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#2a1214" vertical={false} />
+                    <CartesianGrid stroke="#94a3b8" strokeOpacity={0.25} vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} contentStyle={{ background: '#0d0808', border: '1px solid #431c20', borderRadius: 8 }} />
+                    <Tooltip cursor={{ fill: 'rgba(148,163,184,.12)' }} contentStyle={{ background: 'rgb(var(--ink-900))', color: 'rgb(var(--c-white))', border: '1px solid rgb(var(--ink-600))', borderRadius: 8 }} />
                     <Bar dataKey="points" fill="url(#bar)" radius={[3, 3, 0, 0]} maxBarSize={34}>
-                      <LabelList dataKey="points" position="top" fill="#cbd5e1" fontSize={11} />
+                      <LabelList dataKey="points" position="top" fill="#64748b" fontSize={11} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -366,7 +377,7 @@ export default function Dashboard() {
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="d" hide />
-                      <Tooltip contentStyle={{ background: '#0d0808', border: '1px solid #431c20', borderRadius: 8, fontSize: 12 }} />
+                      <Tooltip contentStyle={{ background: 'rgb(var(--ink-900))', color: 'rgb(var(--c-white))', border: '1px solid rgb(var(--ink-600))', borderRadius: 8, fontSize: 12 }} />
                       <Area type="monotone" dataKey="net" stroke="#ff5a67" strokeWidth={2} fill="url(#area)" />
                     </AreaChart>
                   </ResponsiveContainer>

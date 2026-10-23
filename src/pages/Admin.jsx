@@ -9,10 +9,12 @@ import RemindersAdmin from './admin/RemindersAdmin'
 import SubmissionsAdmin from './admin/SubmissionsAdmin'
 import LineupsAdmin from './admin/LineupsAdmin'
 import EventsAdmin from './admin/EventsAdmin'
+import TournamentsAdmin from './admin/TournamentsAdmin'
 
 const TABS = [
   { key: 'branding', label: 'Branding & Access', icon: Palette, C: Branding },
   { key: 'lineups', label: 'Lineups', icon: Flame, C: LineupsAdmin },
+  { key: 'tournaments', label: 'Tournaments', icon: Trophy, C: TournamentsAdmin },
   { key: 'events', label: 'Events', icon: Trophy, C: EventsAdmin },
   { key: 'players', label: 'Players & Accounts', icon: Users, C: PlayersAdmin },
   { key: 'schedules', label: 'Schedules', icon: CalendarClock, C: SchedulesAdmin },

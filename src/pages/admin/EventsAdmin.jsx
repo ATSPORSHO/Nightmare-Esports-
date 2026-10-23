@@ -77,11 +77,11 @@ function Form({ row, onClose, onSaved }) {
             </select>
           </Field>
           <Field label="Result"><input className="input" value={f.placement || ''} onChange={set('placement')} placeholder="Champions, Finalist, 3rd Runner-up" /></Field>
-          <Field label="Prize (optional)"><input className="input" value={f.prize || ''} onChange={set('prize')} /></Field>
+          <Field label="Prize pool (optional)"><input className="input" value={f.prize || ''} onChange={set('prize')} /></Field>
         </div>
         <Field label="Short description (optional)"><input className="input" value={f.description || ''} onChange={set('description')} /></Field>
         <ImageField label="Event image / logo" folder="event" value={f.image_url} onChange={(v) => setF({ ...f, image_url: v })} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.featured} onChange={(e) => setF({ ...f, featured: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Show first (featured)</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.featured} onChange={(e) => setF({ ...f, featured: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Show first as a large featured tournament</label>
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>

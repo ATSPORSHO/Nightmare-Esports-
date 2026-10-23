@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import { ErrorBox } from '../components/ui'
 import { supabaseHost } from '../lib/supabase'
+import ThemeSwitch from '../components/ThemeSwitch'
 
 export default function Login() {
   const { signIn, session, loading } = useAuth()
@@ -27,6 +28,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
+      <ThemeSwitch className="fixed right-4 top-4 z-10" />
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-ink-600 bg-ink-900/90 p-7 shadow-2xl">
         <div className="mb-6 text-center">
           {settings.logo_url

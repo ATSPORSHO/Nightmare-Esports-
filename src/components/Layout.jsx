@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
 import { supabase } from '../lib/supabase'
 import { Avatar } from './ui'
+import ThemeSwitch from './ThemeSwitch'
 
 const MEMBER_NAV = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true },
@@ -51,7 +52,7 @@ export default function Layout() {
     <div className="min-h-screen">
       {/* ---------- header ---------- */}
       <header
-        className="no-print relative border-b border-ink-700/80 bg-ink-900/90"
+        className={`no-print relative border-b border-ink-700/80 bg-ink-900/90 ${settings.banner_url ? 'dark-scope' : ''}`}
         style={settings.banner_url ? {
           backgroundImage: `linear-gradient(90deg, rgba(7,4,5,.95) 0%, rgba(7,4,5,.55) 50%, rgba(7,4,5,.95) 100%), url(${settings.banner_url})`,
           backgroundSize: 'cover', backgroundPosition: 'center',
@@ -73,6 +74,7 @@ export default function Layout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            <ThemeSwitch />
             <div className="hidden items-center gap-2 rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-1.5 text-[11px] text-slate-300 sm:flex">
               <Clock size={14} className="text-accent" />
               <div>

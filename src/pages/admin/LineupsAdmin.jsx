@@ -20,6 +20,7 @@ export default function LineupsAdmin() {
     refresh()
   }
   const toggle = async (l) => { await supabase.from('lineups').update({ active: !l.active }).eq('id', l.id); refresh() }
+  const togglePublic = async (l) => { await supabase.from('lineups').update({ is_public: !l.is_public }).eq('id', l.id); refresh() }
 
   return (
     <div className="space-y-4">
@@ -38,6 +39,9 @@ export default function LineupsAdmin() {
                 <label className="flex items-center gap-1.5 text-xs text-slate-400">
                   <input type="checkbox" checked={l.active} onChange={() => toggle(l)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> active
                 </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-400" title="Visitors who are not logged in can see this lineup and its players">
+                  <input type="checkbox" checked={!!l.is_public} onChange={() => togglePublic(l)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> public
+                </label>
                 <button className="btn-ghost btn-sm" onClick={() => setEditing(l)}><Pencil size={13} /></button>
                 <button className="btn-ghost btn-sm text-red-300" onClick={() => remove(l)}><Trash2 size={13} /></button>
               </li>
@@ -52,7 +56,7 @@ export default function LineupsAdmin() {
 }
 
 function Form({ row, count, onClose, onSaved }) {
-  const [f, setF] = useState({ name: '', tagline: 'PUBG MOBILE TEAM', logo_url: null, active: true, ...row })
+  const [f, setF] = useState({ name: '', tagline: 'PUBG MOBILE TEAM', logo_url: null, active: true, is_public: false, ...row })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -60,7 +64,7 @@ function Form({ row, count, onClose, onSaved }) {
   const save = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
-    const payload = { name: f.name, tagline: f.tagline || null, logo_url: f.logo_url || null, active: f.active }
+    const payload = { name: f.name, tagline: f.tagline || null, logo_url: f.logo_url || null, active: f.active, is_public: !!f.is_public }
     const q = supabase.from('lineups')
     const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert({ ...payload, slug: slugify(f.name) || `lineup-${Date.now()}`, sort: count + 1 })
     setBusy(false)
@@ -72,6 +76,7 @@ function Form({ row, count, onClose, onSaved }) {
       <form onSubmit={save} className="space-y-3">
         <Field label="Lineup name"><input className="input" required value={f.name} onChange={set('name')} placeholder="Nightmare Official" /></Field>
         <Field label="Sub-title"><input className="input" value={f.tagline || ''} onChange={set('tagline')} /></Field>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.is_public} onChange={(e) => setF({ ...f, is_public: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Show this lineup and its players to the public (visitors not logged in)</label>
         <ImageField label="Lineup logo" folder="lineup" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">

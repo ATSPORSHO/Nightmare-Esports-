@@ -75,7 +75,7 @@ export default function SubmissionsAdmin() {
       )}
 
       {lightbox && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
+        <div className="dark-scope fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
           <button className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white"><X /></button>
           <img src={lightbox} alt="" className="max-h-full max-w-full rounded-lg" />
         </div>

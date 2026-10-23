@@ -10,7 +10,7 @@ export const useLineup = () => useContext(Ctx)
  * `current` is the lineup being viewed (null = the whole organization).
  */
 export function LineupProvider({ children }) {
-  const { role } = useAuth()
+  const { role, profile } = useAuth()
   const [lineups, setLineups] = useState([])
   const [slug, setSlugState] = useState(() => {
     try { return localStorage.getItem('lineup') || 'all' } catch { return 'all' }
@@ -27,7 +27,9 @@ export function LineupProvider({ children }) {
     try { localStorage.setItem('lineup', s) } catch { /* ignore */ }
   }
 
-  const activeLineups = useMemo(() => lineups.filter((l) => l.active), [lineups])
+  // a player only ever sees their own lineup; admin / management / guests see all (guests: public ones, enforced by the database)
+  const ownId = role === 'player' ? profile?.lineup_id : null
+  const activeLineups = useMemo(() => lineups.filter((l) => l.active && (!ownId || l.id === ownId)), [lineups, ownId])
   const current = useMemo(() => activeLineups.find((l) => l.slug === slug) || null, [activeLineups, slug])
   const byId = useMemo(() => Object.fromEntries(lineups.map((l) => [l.id, l])), [lineups])
 

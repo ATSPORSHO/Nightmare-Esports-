@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { SettingsProvider, useSettings } from './context/SettingsContext'
 import { configured } from './lib/supabase'
 import Layout from './components/Layout'
@@ -58,6 +59,7 @@ function SetupNeeded() {
 export default function App() {
   if (!configured) return <SetupNeeded />
   return (
+    <ThemeProvider>
     <HashRouter>
       <AuthProvider>
         <SettingsProvider>
@@ -84,5 +86,6 @@ export default function App() {
         </SettingsProvider>
       </AuthProvider>
     </HashRouter>
+    </ThemeProvider>
   )
 }
