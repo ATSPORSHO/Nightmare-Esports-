@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Flag } from 'lucide-react'
+import { Plus, Pencil, Trash2, Flag, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { todayStr } from '../../lib/format'
 import { Card, ErrorBox, Field, Modal, Spinner } from '../../components/ui'
 import ImageField from '../../components/ImageField'
+import TournamentGroups from './TournamentGroups'
 
 export default function TournamentsAdmin() {
   const { data, loading, error, reload } = useData(() => supabase.from('tournaments').select('*').order('start_date', { ascending: false }))
   const [editing, setEditing] = useState(null)
   const [ending, setEnding] = useState(null)
+  const [grouping, setGrouping] = useState(null)
   const today = todayStr()
 
   const state = (t) => (t.ended ? 'ended' : !t.active ? 'hidden' : t.end_date && t.end_date < today ? 'ended' : t.start_date > today ? 'upcoming' : 'live')
@@ -43,6 +45,7 @@ export default function TournamentsAdmin() {
                   <label className="flex items-center gap-1.5 text-xs text-slate-400">
                     <input type="checkbox" checked={t.active} onChange={() => toggle(t)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> show
                   </label>
+                  <button className="btn-ghost btn-sm" title="Add teams and draw groups" onClick={() => setGrouping(t)}><Users size={13} /> Teams &amp; groups</button>
                   {!t.ended && <button className="btn-ghost btn-sm text-amber-300" title="End tournament and add it to Successful events" onClick={() => setEnding(t)}><Flag size={13} /> End</button>}
                   <button className="btn-ghost btn-sm" onClick={() => setEditing(t)}><Pencil size={13} /></button>
                   <button className="btn-ghost btn-sm text-red-300" onClick={() => remove(t)}><Trash2 size={13} /></button>
@@ -53,6 +56,7 @@ export default function TournamentsAdmin() {
           </ul>
         )}
       </Card>
+      {grouping && <TournamentGroups tournament={grouping} onClose={() => setGrouping(null)} />}
       {ending && <EndForm t={ending} onClose={() => setEnding(null)} onDone={() => { setEnding(null); reload() }} />}
       {editing && <Form row={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
     </div>

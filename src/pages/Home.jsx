@@ -220,7 +220,8 @@ export default function Home() {
                       {t.prize_pool && <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Prize pool</div><div className="font-display text-lg font-extrabold text-amber-300">{t.prize_pool}</div></div>}
                       <div><div className="text-[10px] uppercase tracking-wider text-slate-400">{t.end_date ? 'Dates' : 'Starts'}</div><div className="text-sm font-semibold text-white">{fmtDay(t.start_date)}{t.end_date ? ` – ${fmtDay(t.end_date)}` : ''}</div></div>
                       {t.teams ? <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Teams</div><div className="text-sm font-semibold text-white">{t.teams}</div></div> : null}
-                      {t.link_url && <a href={t.link_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm ml-auto">Details <ArrowRight size={13} /></a>}
+                      <Link to={`/tournament/${t.id}`} className="btn-ghost btn-sm ml-auto">Groups &amp; slots <ArrowRight size={13} /></Link>
+                      {t.link_url && <a href={t.link_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm">Details <ArrowRight size={13} /></a>}
                     </div>
                   </article>
                 ))}
