@@ -158,17 +158,15 @@ export default function Home() {
                       />
                     )}
                     <div className="relative flex items-center gap-4">
-                      {/* large red square logo */}
-                      <div className="dark-scope flex h-28 w-28 shrink-0 items-center justify-center rounded-2xl border border-red-400/30 bg-gradient-to-br from-red-600 to-red-900 shadow-lg shadow-black/40 sm:h-32 sm:w-32">
+                      {/* logo on a black square */}
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-red-900/70 bg-black shadow-lg shadow-black/40">
                         {l.logo_url
-                          ? <img src={l.logo_url} alt="" className="h-full w-full object-contain p-3" />
-                          : <span className="font-display text-5xl font-extrabold text-white">{l.name[0]}</span>}
+                          ? <img src={l.logo_url} alt="" className="h-full w-full object-contain p-2" />
+                          : <span className="font-display text-4xl font-extrabold text-[#ff3b4a]">{l.name[0]}</span>}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="rounded border border-amber-500/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">Active lineup</span>
-                        <h3 className="mt-1 font-display text-xl font-extrabold uppercase leading-tight tracking-wide text-white sm:text-2xl">{l.name}</h3>
+                        <h3 className="font-display text-xl font-extrabold uppercase leading-tight tracking-wide text-white">{l.name}</h3>
                         <p className="text-xs uppercase tracking-wider text-slate-400">{l.tagline || 'PUBG MOBILE TEAM'}</p>
-                        <div className="mt-2 text-sm"><span className="font-display text-lg font-extrabold text-white">{players.length}</span> <span className="text-slate-400">players</span></div>
                       </div>
                     </div>
                     <div className="relative mt-12 grid grid-cols-2 gap-x-3 gap-y-12 sm:grid-cols-3 xl:grid-cols-5">

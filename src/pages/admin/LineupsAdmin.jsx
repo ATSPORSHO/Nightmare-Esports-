@@ -77,7 +77,7 @@ function Form({ row, count, onClose, onSaved }) {
         <Field label="Lineup name"><input className="input" required value={f.name} onChange={set('name')} placeholder="Nightmare Official" /></Field>
         <Field label="Sub-title"><input className="input" value={f.tagline || ''} onChange={set('tagline')} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.is_public} onChange={(e) => setF({ ...f, is_public: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Show this lineup and its players to the public (visitors not logged in)</label>
-        <ImageField label="Lineup logo (shown on the large red square)" folder="lineup" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+        <ImageField label="Lineup logo (shown on a black square)" folder="lineup" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
         <ImageField label="Background picture (fills half of the lineup card)" folder="lineup-bg" value={f.banner_url} onChange={(v) => setF({ ...f, banner_url: v })} hint="A wide image works best, e.g. a team photo or artwork." />
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">
