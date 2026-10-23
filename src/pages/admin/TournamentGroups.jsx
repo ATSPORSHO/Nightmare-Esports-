@@ -3,6 +3,7 @@ import { Shuffle, Trash2, Plus, Save } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { ErrorBox, Field, Modal, Notice, Spinner } from '../../components/ui'
+import { rank, totalOf } from '../../lib/tournament'
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const MIN_SLOT = 2
@@ -112,6 +113,14 @@ export default function TournamentGroups({ tournament, onClose }) {
     reload()
   }
 
+  const toggleEnded = async (r) => {
+    const status = r.status === 'ended' ? 'open' : 'ended'
+    const { error } = await supabase.from('tournament_rounds').update({ status }).eq('id', r.id)
+    if (error) return setErr(error.message)
+    setMsg(status === 'ended' ? `${r.name} ended: visitors now see the results / leaderboard instead of the slot list.` : `${r.name} reopened: visitors see the slot list again.`)
+    reload()
+  }
+
   const deleteRound = async (r) => {
     if (!window.confirm(`Delete “${r.name}” with all its groups and qualified marks?`)) return
     const { error } = await supabase.from('tournament_rounds').delete().eq('id', r.id)
@@ -163,7 +172,7 @@ export default function TournamentGroups({ tournament, onClose }) {
 
         {/* 3. rounds + groups */}
         <section>
-          <div className="label">3. Rounds — set date, time, qualifiers and tick the teams that qualified</div>
+          <div className="label">3. Rounds — date, time, qualifiers, match results and qualified teams</div>
           {rounds.loading || groups.loading || gts.loading ? <Spinner /> : !R.length ? (
             <div className="rounded-lg border border-ink-700 p-4 text-center text-sm text-slate-500">No rounds yet. Add teams and press “Draw groups”.</div>
           ) : (
@@ -172,7 +181,13 @@ export default function TournamentGroups({ tournament, onClose }) {
                 {R.map((r) => (
                   <button key={r.id} type="button" onClick={() => setRid(r.id)} className={`btn btn-sm ${active?.id === r.id ? 'bg-accent text-white' : 'border border-ink-600 text-slate-300'}`}>{r.name}</button>
                 ))}
-                {active && <button type="button" className="btn-ghost btn-sm ml-auto text-red-300" onClick={() => deleteRound(active)}><Trash2 size={13} /> Delete this round</button>}
+                {active && (
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <span className={active.status === 'ended' ? 'badge-green' : 'badge-amber'}>{active.status === 'ended' ? 'results shown' : 'slot list shown'}</span>
+                    <button type="button" className="btn-primary btn-sm" onClick={() => toggleEnded(active)}>{active.status === 'ended' ? 'Reopen round (show slot list)' : 'End round & show results'}</button>
+                    <button type="button" className="btn-ghost btn-sm text-red-300" onClick={() => deleteRound(active)}><Trash2 size={13} /> Delete</button>
+                  </div>
+                )}
               </div>
               <div className="space-y-4">
                 {groupsOf(active).map((g) => (
@@ -194,7 +209,11 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
   })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [res, setRes] = useState({}) // entry id -> { wwcd, place_pts, kill_pts } being typed
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const val = (x, k) => (res[x.id]?.[k] ?? x[k] ?? 0)
+  const setVal = (x, k, v) => setRes((r) => ({ ...r, [x.id]: { ...r[x.id], [k]: v } }))
+  const withRes = (x) => ({ ...x, wwcd: val(x, 'wwcd'), place_pts: val(x, 'place_pts'), kill_pts: val(x, 'kill_pts') })
   const last = Number(f.slot_start) + entries.length - 1
   const qualifiedCount = entries.filter((x) => x.qualified).length
 
@@ -215,8 +234,30 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     }).eq('id', g.id)
     if (error) { setBusy(false); return setErr(error.message) }
     const e2 = await renumber(entries, start)
+    if (e2) { setBusy(false); return setErr(e2.message) }
+    const e3 = await saveResults()
     setBusy(false)
-    if (e2) return setErr(e2.message)
+    if (e3) return setErr(e3.message)
+    onChanged()
+  }
+
+  const saveResults = async () => {
+    const jobs = entries.map((x) => supabase.from('tournament_group_teams').update({
+      wwcd: Number(val(x, 'wwcd')) || 0, place_pts: Number(val(x, 'place_pts')) || 0, kill_pts: Number(val(x, 'kill_pts')) || 0,
+    }).eq('id', x.id))
+    return (await Promise.all(jobs)).find((r) => r.error)?.error
+  }
+
+  // tick the top N teams of this group (by the results typed below) as qualified
+  const autoQualify = async () => {
+    setErr('')
+    const n = Number(f.qualify) || 0
+    const e1 = await saveResults()
+    if (e1) return setErr(e1.message)
+    const order = rank(entries.map(withRes)).map((x) => x.id)
+    const jobs = entries.map((x) => supabase.from('tournament_group_teams').update({ qualified: order.indexOf(x.id) < n }).eq('id', x.id))
+    const bad = (await Promise.all(jobs)).find((r) => r.error)?.error
+    if (bad) return setErr(bad.message)
     onChanged()
   }
 
@@ -253,14 +294,18 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
 
       <div className="mt-2 divide-y divide-ink-700/60 rounded-lg border border-ink-700">
         <div className="flex items-center gap-3 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          <span className="w-8">Slot</span><span className="flex-1">Team</span><span>Qualified</span><span className="w-28 text-right">Move to</span>
+          <span className="w-8">Slot</span><span className="min-w-0 flex-1">Team</span><span className="w-14 text-center">WWCD</span><span className="w-16 text-center">Place pts</span><span className="w-16 text-center">Kill pts</span><span className="w-12 text-center">Total</span><span>Qual.</span><span className="w-28 text-right">Move to</span>
         </div>
         {entries.map((x, i) => {
           const t = teamById[x.team_id]
           return (
             <div key={x.id} className="flex items-center gap-3 px-3 py-1.5 text-sm">
               <span className="w-8 font-semibold text-red-400">{Number(f.slot_start) + i}</span>
-              <span className={`flex-1 ${t?.is_ours ? 'font-semibold text-white' : ''}`}>{t?.name || '—'}</span>
+              <span className={`min-w-0 flex-1 truncate ${t?.is_ours ? 'font-semibold text-white' : ''}`}>{t?.name || '—'}</span>
+              <input className="input !w-14 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'wwcd')} onChange={(e) => setVal(x, 'wwcd', e.target.value)} />
+              <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'place_pts')} onChange={(e) => setVal(x, 'place_pts', e.target.value)} />
+              <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'kill_pts')} onChange={(e) => setVal(x, 'kill_pts', e.target.value)} />
+              <span className="w-12 text-center font-semibold text-white">{totalOf(withRes(x))}</span>
               <input type="checkbox" checked={!!x.qualified} onChange={() => toggleQualified(x)} className="h-4 w-4 accent-[rgb(var(--accent))]" title="Qualified for the next round" />
               <select className="input !w-28 !py-0.5 text-xs" value={g.id} onChange={(e) => move(x, e.target.value)} title="Move to another group">
                 {groups.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
@@ -271,7 +316,10 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
         {!entries.length && <div className="px-3 py-3 text-center text-xs text-slate-500">No teams in this group.</div>}
       </div>
       <ErrorBox>{err}</ErrorBox>
-      <div className="mt-2 text-right"><button type="button" className="btn-primary btn-sm" disabled={busy} onClick={save}><Save size={14} /> {busy ? 'Saving…' : 'Save group'}</button></div>
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
+        <button type="button" className="btn-ghost btn-sm" title="Ticks the top teams of this group as qualified, using the points typed above" onClick={autoQualify}>Mark top {Number(f.qualify) || 0} as qualified</button>
+        <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={save}><Save size={14} /> {busy ? 'Saving…' : 'Save group & results'}</button>
+      </div>
     </div>
   )
 }
