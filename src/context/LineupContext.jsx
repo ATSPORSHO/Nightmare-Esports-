@@ -29,7 +29,11 @@ export function LineupProvider({ children }) {
 
   // a player only ever sees their own lineup; admin / management / guests see all (guests: public ones, enforced by the database)
   const ownId = role === 'player' ? profile?.lineup_id : null
-  const activeLineups = useMemo(() => lineups.filter((l) => l.active && (!ownId || l.id === ownId)), [lineups, ownId])
+  // visitors who are not logged in only ever get lineups marked "public" (the database enforces it too)
+  const activeLineups = useMemo(
+    () => lineups.filter((l) => l.active && (!ownId || l.id === ownId) && (role !== 'guest' || l.is_public === true)),
+    [lineups, ownId, role],
+  )
   const current = useMemo(() => activeLineups.find((l) => l.slug === slug) || null, [activeLineups, slug])
   const byId = useMemo(() => Object.fromEntries(lineups.map((l) => [l.id, l])), [lineups])
 

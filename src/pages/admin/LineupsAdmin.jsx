@@ -56,7 +56,7 @@ export default function LineupsAdmin() {
 }
 
 function Form({ row, count, onClose, onSaved }) {
-  const [f, setF] = useState({ name: '', tagline: 'PUBG MOBILE TEAM', logo_url: null, active: true, is_public: false, ...row })
+  const [f, setF] = useState({ name: '', tagline: 'PUBG MOBILE TEAM', logo_url: null, banner_url: null, active: true, is_public: false, ...row })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -64,7 +64,7 @@ function Form({ row, count, onClose, onSaved }) {
   const save = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
-    const payload = { name: f.name, tagline: f.tagline || null, logo_url: f.logo_url || null, active: f.active, is_public: !!f.is_public }
+    const payload = { name: f.name, tagline: f.tagline || null, logo_url: f.logo_url || null, banner_url: f.banner_url || null, active: f.active, is_public: !!f.is_public }
     const q = supabase.from('lineups')
     const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert({ ...payload, slug: slugify(f.name) || `lineup-${Date.now()}`, sort: count + 1 })
     setBusy(false)
@@ -77,7 +77,8 @@ function Form({ row, count, onClose, onSaved }) {
         <Field label="Lineup name"><input className="input" required value={f.name} onChange={set('name')} placeholder="Nightmare Official" /></Field>
         <Field label="Sub-title"><input className="input" value={f.tagline || ''} onChange={set('tagline')} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.is_public} onChange={(e) => setF({ ...f, is_public: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Show this lineup and its players to the public (visitors not logged in)</label>
-        <ImageField label="Lineup logo" folder="lineup" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+        <ImageField label="Lineup logo (shown on the large red square)" folder="lineup" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+        <ImageField label="Background picture (fills half of the lineup card)" folder="lineup-bg" value={f.banner_url} onChange={(v) => setF({ ...f, banner_url: v })} hint="A wide image works best, e.g. a team photo or artwork." />
         <ErrorBox>{err}</ErrorBox>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
