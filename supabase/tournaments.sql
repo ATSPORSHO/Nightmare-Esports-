@@ -28,3 +28,7 @@ grant select on public.tournaments to anon;
 grant select, insert, update, delete on public.tournaments to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
+
+-- "End tournament" button (moves a tournament into Successful events)
+alter table public.tournaments add column if not exists ended boolean not null default false;
+select pg_notify('pgrst', 'reload schema');
