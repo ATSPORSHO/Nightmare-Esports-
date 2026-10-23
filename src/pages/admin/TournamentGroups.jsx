@@ -25,7 +25,7 @@ export default function TournamentGroups({ tournament, onClose }) {
   const teams = useData(() => supabase.from('tournament_teams').select('*').eq('tournament_id', tid).order('name'), [tid])
   const groups = useData(() => supabase.from('tournament_groups').select('*').eq('tournament_id', tid).order('sort'), [tid])
   const [names, setNames] = useState('')
-  const [draw, setDraw] = useState({ groups: 2, qualify: 8, slot_start: 2 })
+  const [draw, setDraw] = useState({ round: 'Round 1', groups: 2, qualify: 8, slot_start: 2 })
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -71,7 +71,7 @@ export default function TournamentGroups({ tournament, onClose }) {
     if (del.error) return fail(del.error)
     const ins = await supabase.from('tournament_groups').insert(
       Array.from({ length: g }, (_, i) => ({
-        tournament_id: tid, name: `Group ${LETTERS[i] || i + 1}`, qualify: Number(draw.qualify) || 0, slot_start: start, sort: i + 1,
+        tournament_id: tid, name: `Group ${LETTERS[i] || i + 1}`, round: draw.round || null, qualify: Number(draw.qualify) || 0, slot_start: start, sort: i + 1,
       })),
     ).select('id, sort')
     if (ins.error) return fail(ins.error)
@@ -122,7 +122,8 @@ export default function TournamentGroups({ tournament, onClose }) {
         {/* 2. draw */}
         <section>
           <div className="label">2. Random draw</div>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-5">
+            <Field label="Round"><input className="input" value={draw.round} onChange={(e) => setDraw({ ...draw, round: e.target.value })} placeholder="Round 1, Quarter Final…" /></Field>
             <Field label="Number of groups"><input className="input" type="number" min="1" value={draw.groups} onChange={(e) => setDraw({ ...draw, groups: e.target.value })} /></Field>
             <Field label="Teams qualifying per group"><input className="input" type="number" min="0" value={draw.qualify} onChange={(e) => setDraw({ ...draw, qualify: e.target.value })} /></Field>
             <Field label={`Slot list starts at (${MIN_SLOT}–${MAX_SLOT})`}><input className="input" type="number" min={MIN_SLOT} max={MAX_SLOT} value={draw.slot_start} onChange={(e) => setDraw({ ...draw, slot_start: e.target.value })} /></Field>
@@ -154,7 +155,7 @@ export default function TournamentGroups({ tournament, onClose }) {
 
 function GroupEditor({ g, groups, teams, allTeams, onChanged }) {
   const [f, setF] = useState({
-    name: g.name, match_date: g.match_date || '', match_time: String(g.match_time || '').slice(0, 5),
+    name: g.name, round: g.round || '', match_date: g.match_date || '', match_time: String(g.match_time || '').slice(0, 5),
     match_note: g.match_note || '', qualify: g.qualify, slot_start: g.slot_start,
   })
   const [err, setErr] = useState('')
@@ -174,7 +175,7 @@ function GroupEditor({ g, groups, teams, allTeams, onChanged }) {
     if (last > MAX_SLOT) return setErr(`${teams.length} teams starting at slot ${start} would pass slot ${MAX_SLOT}.`)
     setBusy(true)
     const { error } = await supabase.from('tournament_groups').update({
-      name: f.name, match_date: f.match_date || null, match_time: f.match_time || null, match_note: f.match_note || null,
+      name: f.name, round: f.round || null, match_date: f.match_date || null, match_time: f.match_time || null, match_note: f.match_note || null,
       qualify: Number(f.qualify) || 0, slot_start: start,
     }).eq('id', g.id)
     if (error) { setBusy(false); return setErr(error.message) }
@@ -197,7 +198,8 @@ function GroupEditor({ g, groups, teams, allTeams, onChanged }) {
 
   return (
     <div className="rounded-xl border border-ink-600 bg-ink-850 p-3">
-      <div className="grid gap-2 sm:grid-cols-6">
+      <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <Field label="Round"><input className="input" value={f.round} onChange={set('round')} placeholder="Round 1" /></Field>
         <Field label="Group name"><input className="input" value={f.name} onChange={set('name')} /></Field>
         <Field label="Date"><input className="input" type="date" value={f.match_date} onChange={set('match_date')} /></Field>
         <Field label="Match time"><input className="input" type="time" value={f.match_time} onChange={set('match_time')} /></Field>

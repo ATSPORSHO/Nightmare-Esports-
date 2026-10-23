@@ -37,3 +37,7 @@ begin
 end $$;
 
 select pg_notify('pgrst', 'reload schema');
+
+-- which round each group belongs to (Round 1, Quarter Final, ...)
+alter table public.tournament_groups add column if not exists round text;
+select pg_notify('pgrst', 'reload schema');
