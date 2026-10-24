@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { ErrorBox, Field, Modal, Notice, Spinner } from '../../components/ui'
 import { rank, totalOf } from '../../lib/tournament'
+import LogoPick from '../../components/LogoPick'
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const MIN_SLOT = 2
@@ -31,6 +32,7 @@ export default function TournamentGroups({ tournament, onClose }) {
   const groups = useData(() => supabase.from('tournament_groups').select('*').eq('tournament_id', tid).order('sort'), [tid])
   const gts = useData(() => supabase.from('tournament_group_teams').select('*').eq('tournament_id', tid), [tid])
   const [names, setNames] = useState('')
+  const [one, setOne] = useState({ name: '', logo: null })
   const [draw, setDraw] = useState({ round: '', groups: 2, qualify: 8, slot_start: 2 })
   const [rid, setRid] = useState(null)
   const [msg, setMsg] = useState('')
@@ -59,6 +61,20 @@ export default function TournamentGroups({ tournament, onClose }) {
     setBusy(false)
     if (error) return setErr(error.message)
     setNames(''); reload()
+  }
+  const addOne = async () => {
+    const name = one.name.trim()
+    if (!name) return
+    setBusy(true); setErr(''); setMsg('')
+    const { error } = await supabase.from('tournament_teams').insert({ tournament_id: tid, name, logo_url: one.logo || null })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setOne({ name: '', logo: null }); reload()
+  }
+  const setLogo = async (t, url) => {
+    const { error } = await supabase.from('tournament_teams').update({ logo_url: url }).eq('id', t.id)
+    if (error) return setErr(error.message)
+    reload()
   }
   const removeTeam = async (t) => {
     if (!window.confirm(`Remove ${t.name} from the tournament (all rounds)?`)) return
@@ -133,7 +149,13 @@ export default function TournamentGroups({ tournament, onClose }) {
       <div className="space-y-5">
         {/* 1. teams */}
         <section>
-          <div className="label">1. Add the participating teams (one name per line)</div>
+          <div className="label">1. Add the participating teams</div>
+          <div className="flex items-center gap-2">
+            <LogoPick size={40} value={one.logo} onChange={(u) => setOne({ ...one, logo: u })} title="Team logo (optional)" />
+            <input className="input" placeholder="Team name" value={one.name} onChange={(e) => setOne({ ...one, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOne() } }} />
+            <button type="button" className="btn-primary btn-sm shrink-0" disabled={busy || !one.name.trim()} onClick={addOne}><Plus size={14} /> Add team</button>
+          </div>
+          <div className="mb-1 mt-3 text-xs text-slate-500">Or paste many names at once (one per line) and add the logos afterwards by clicking the small square next to each team:</div>
           <textarea className="input min-h-[90px]" value={names} onChange={(e) => setNames(e.target.value)} placeholder={'INF ESPORTS\nNM ESPORTS\nT6 ESPORTS'} />
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-slate-500">{T.length} teams added</span>
@@ -142,7 +164,8 @@ export default function TournamentGroups({ tournament, onClose }) {
           {teams.loading ? <Spinner /> : T.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {T.map((t) => (
-                <span key={t.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1.5 text-xs ${t.is_ours ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-300'}`}>
+                <span key={t.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-1.5 text-xs ${t.is_ours ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-300'}`}>
+                  <LogoPick size={24} value={t.logo_url} onChange={(u) => setLogo(t, u)} />
                   <button type="button" title="Mark as our team (highlighted)" onClick={() => toggleOurs(t)}>{t.is_ours ? '★' : '☆'}</button>
                   {t.name}
                   <button type="button" onClick={() => removeTeam(t)} className="text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
@@ -236,8 +259,11 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     const e2 = await renumber(entries, start)
     if (e2) { setBusy(false); return setErr(e2.message) }
     const e3 = await saveResults()
+    if (e3) { setBusy(false); return setErr(e3.message) }
+    // results typed? then the top teams are marked as qualified automatically
+    const e4 = await applyQualified(Number(f.qualify) || 0)
     setBusy(false)
-    if (e3) return setErr(e3.message)
+    if (e4) return setErr(e4.message)
     onChanged()
   }
 
@@ -248,17 +274,13 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     return (await Promise.all(jobs)).find((r) => r.error)?.error
   }
 
-  // tick the top N teams of this group (by the results typed below) as qualified
-  const autoQualify = async () => {
-    setErr('')
-    const n = Number(f.qualify) || 0
-    const e1 = await saveResults()
-    if (e1) return setErr(e1.message)
-    const order = rank(entries.map(withRes)).map((x) => x.id)
+  // mark the top N teams (by the results typed) as qualified, everyone else as not qualified
+  const applyQualified = async (n) => {
+    const withResults = entries.map(withRes)
+    if (!withResults.some((x) => totalOf(x) > 0)) return null // no results yet: keep manual ticks
+    const order = rank(withResults).map((x) => x.id)
     const jobs = entries.map((x) => supabase.from('tournament_group_teams').update({ qualified: order.indexOf(x.id) < n }).eq('id', x.id))
-    const bad = (await Promise.all(jobs)).find((r) => r.error)?.error
-    if (bad) return setErr(bad.message)
-    onChanged()
+    return (await Promise.all(jobs)).find((r) => r.error)?.error
   }
 
   const toggleQualified = async (x) => {
@@ -317,7 +339,7 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
       </div>
       <ErrorBox>{err}</ErrorBox>
       <div className="mt-2 flex flex-wrap justify-end gap-2">
-        <button type="button" className="btn-ghost btn-sm" title="Ticks the top teams of this group as qualified, using the points typed above" onClick={autoQualify}>Mark top {Number(f.qualify) || 0} as qualified</button>
+        <span className="mr-auto self-center text-[11px] text-slate-500">Saving results marks the top {Number(f.qualify) || 0} teams as qualified automatically.</span>
         <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={save}><Save size={14} /> {busy ? 'Saving…' : 'Save group & results'}</button>
       </div>
     </div>

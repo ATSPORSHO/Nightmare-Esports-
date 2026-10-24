@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Flag, Users } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Flag, Users, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { todayStr } from '../../lib/format'
@@ -45,6 +46,7 @@ export default function TournamentsAdmin() {
                   <label className="flex items-center gap-1.5 text-xs text-slate-400">
                     <input type="checkbox" checked={t.active} onChange={() => toggle(t)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> show
                   </label>
+                  <Link to={`/tournament/${t.id}/report`} className="btn-ghost btn-sm" title="A4 slot list report, one group per page"><FileText size={13} /> A4 report</Link>
                   <button className="btn-ghost btn-sm" title="Add teams and draw groups" onClick={() => setGrouping(t)}><Users size={13} /> Teams &amp; groups</button>
                   {!t.ended && <button className="btn-ghost btn-sm text-amber-300" title="End tournament and add it to Successful events" onClick={() => setEnding(t)}><Flag size={13} /> End</button>}
                   <button className="btn-ghost btn-sm" onClick={() => setEditing(t)}><Pencil size={13} /></button>

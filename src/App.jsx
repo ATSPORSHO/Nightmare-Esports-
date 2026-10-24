@@ -8,6 +8,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Home from './pages/Home'
 import TournamentView from './pages/TournamentView'
+import TournamentReport from './pages/TournamentReport'
 import { LineupProvider } from './context/LineupContext'
 import Players from './pages/Players'
 import Matches from './pages/Matches'
@@ -71,6 +72,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="tournament/:id" element={<TournamentView />} />
+              <Route path="tournament/:id/report" element={<Guard roles={['admin']}><TournamentReport /></Guard>} />
               <Route path="lineup/:slug" element={<Dashboard />} />
               <Route path="dashboard" element={<Navigate to="/" replace />} />
               <Route path="players" element={<Guard roles={['admin', 'management', 'player']}><Players /></Guard>} />
