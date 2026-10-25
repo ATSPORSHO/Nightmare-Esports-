@@ -120,6 +120,11 @@ body {
   .a4-page:last-child { break-after: auto; page-break-after: auto; }
 }
 
+/* Current-standings report: landscape A4, 8 teams per page */
+@page a4landscape { size: A4 landscape; margin: 0; }
+.a4l-area { page: a4landscape; }
+@media print { .a4l-area { overflow: visible !important; } }
+
 /* One-page team report keeps its blood-red / black look on paper */
 .report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
