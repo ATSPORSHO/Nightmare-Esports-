@@ -5,10 +5,12 @@ import { useData } from '../../lib/hooks'
 import { ErrorBox, Field, Modal, Spinner } from '../../components/ui'
 import ImageField from '../../components/ImageField'
 import LogoPick from '../../components/LogoPick'
+import Flag from '../../components/Flag'
+import { COUNTRIES } from '../../lib/countries'
 
 /** Edit one tournament team: name, tag, logo, "invited" flag and its players (name + photo). */
-export default function TeamEditor({ team, onClose, onChanged }) {
-  const [f, setF] = useState({ name: team.name, tag: team.tag || '', logo_url: team.logo_url || null, photo_url: team.photo_url || null, invited: !!team.invited })
+export default function TeamEditor({ team, onClose, onChanged, international = false }) {
+  const [f, setF] = useState({ name: team.name, tag: team.tag || '', logo_url: team.logo_url || null, photo_url: team.photo_url || null, invited: !!team.invited, country: team.country || '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [np, setNp] = useState({ name: '', photo: null })
@@ -18,7 +20,7 @@ export default function TeamEditor({ team, onClose, onChanged }) {
   const saveTeam = async () => {
     if (!f.name.trim()) return setErr('Team name is required.')
     setBusy(true); setErr('')
-    const { error } = await supabase.from('tournament_teams').update({ name: f.name.trim(), tag: f.tag.trim() || null, logo_url: f.logo_url || null, photo_url: f.photo_url || null, invited: f.invited }).eq('id', team.id)
+    const { error } = await supabase.from('tournament_teams').update({ name: f.name.trim(), tag: f.tag.trim() || null, logo_url: f.logo_url || null, photo_url: f.photo_url || null, invited: f.invited, ...(international || 'country' in team ? { country: f.country || null } : {}) }).eq('id', team.id)
     setBusy(false)
     if (error) return setErr(error.message)
     onChanged(); onClose()
@@ -56,6 +58,17 @@ export default function TeamEditor({ team, onClose, onChanged }) {
           <Field label="Team name"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Team tag (short, e.g. NMR)"><input className="input" maxLength={8} value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value.toUpperCase() })} placeholder="NMR" /></Field>
         </div>
+        {international && (
+          <Field label="Country (flag shown beside the team name)">
+            <div className="flex items-center gap-2">
+              <Flag code={f.country} h="6mm" />
+              <select className="input" value={f.country} onChange={(e) => setF({ ...f, country: e.target.value })}>
+                <option value="">— no flag —</option>
+                {COUNTRIES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+              </select>
+            </div>
+          </Field>
+        )}
         <ImageField label="Team logo" folder="team" value={f.logo_url} onChange={(v) => saveImg('logo_url', v)} />
         <ImageField label="Team photo (squad picture, shown big on the current-standings page when the team is #1)" folder="teamphoto" value={f.photo_url} onChange={(v) => saveImg('photo_url', v)} />
         <label className="flex items-center gap-2 text-sm">

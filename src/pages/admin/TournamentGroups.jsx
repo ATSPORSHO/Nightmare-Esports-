@@ -6,6 +6,7 @@ import { ErrorBox, Field, Modal, Notice, Spinner } from '../../components/ui'
 import { rank, totalOf } from '../../lib/tournament'
 import LogoPick from '../../components/LogoPick'
 import TeamEditor from './TeamEditor'
+import Flag from '../../components/Flag'
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const MIN_SLOT = 2
@@ -159,7 +160,7 @@ export default function TournamentGroups({ tournament, onClose }) {
 
   return (
     <Modal title={`Teams, rounds & groups — ${tournament.title}`} onClose={onClose} wide>
-      {editTeam && <TeamEditor team={editTeam} onClose={() => setEditTeam(null)} onChanged={reload} />}
+      {editTeam && <TeamEditor international={tournament.scope === 'international'} team={editTeam} onClose={() => setEditTeam(null)} onChanged={reload} />}
       <div className="space-y-5">
         {/* 1. teams */}
         <section>
@@ -264,7 +265,7 @@ export default function TournamentGroups({ tournament, onClose }) {
               </div>
               <div className="space-y-4">
                 {groupsOf(active).map((g) => (
-                  <GroupEditor key={g.id + (g.slot_start ?? '')} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
+                  <GroupEditor key={g.id + (g.slot_start ?? '') + entriesOf(g).map((x) => x.slot).join('')} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
                 ))}
               </div>
             </>
@@ -339,6 +340,22 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     onChanged()
   }
 
+  /** pick another slot for a team: the team that had that slot gets this team's old slot (swap) */
+  const setSlot = async (x, newSlot) => {
+    const target = Number(newSlot)
+    const mine = x.slot ?? null
+    if (!Number.isInteger(target) || target === mine) return
+    setErr('')
+    const other = entries.find((y) => y.id !== x.id && y.slot === target)
+    const a = await supabase.from('tournament_group_teams').update({ slot: target }).eq('id', x.id)
+    if (a.error) return setErr(a.error.message)
+    if (other) {
+      const b = await supabase.from('tournament_group_teams').update({ slot: mine }).eq('id', other.id)
+      if (b.error) return setErr(b.error.message)
+    }
+    onChanged()
+  }
+
   const move = async (x, toGroupId) => {
     if (!toGroupId || toGroupId === g.id) return
     const target = groups.find((y) => y.id === toGroupId)
@@ -372,8 +389,10 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
           const t = teamById[x.team_id]
           return (
             <div key={x.id} className="flex items-center gap-3 px-3 py-1.5 text-sm">
-              <span className="w-8 font-semibold text-red-400">{Number(f.slot_start) + i}</span>
-              <span className={`min-w-0 flex-1 truncate ${t?.is_ours ? 'font-semibold text-white' : ''}`}>{t?.name || '—'}</span>
+              <select className="input !w-16 !px-1 !py-0.5 text-center text-xs font-semibold text-red-400" value={x.slot ?? Number(f.slot_start) + i} onChange={(e) => setSlot(x, e.target.value)} title="Change the slot: the team on that slot swaps places with this one">
+                {entries.map((_, k) => <option key={k} value={Number(f.slot_start) + k}>{Number(f.slot_start) + k}</option>)}
+              </select>
+              <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate ${t?.is_ours ? 'font-semibold text-white' : ''}`}><Flag code={t?.country} h="3.5mm" />{t?.name || '—'}</span>
               <input className="input !w-14 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'wwcd')} onChange={(e) => setVal(x, 'wwcd', e.target.value)} />
               <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'place_pts')} onChange={(e) => setVal(x, 'place_pts', e.target.value)} />
               <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'kill_pts')} onChange={(e) => setVal(x, 'kill_pts', e.target.value)} />

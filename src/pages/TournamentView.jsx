@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import Flag from '../components/Flag'
 import { useData } from '../lib/hooks'
 import { Spinner } from '../components/ui'
 import { rank, totalOf } from '../lib/tournament'
@@ -128,7 +129,7 @@ export default function TournamentView() {
                         <div key={x.id} className={`grid grid-cols-[70px_1fr] items-center px-5 py-2.5 text-sm uppercase ${t?.is_ours ? 'bg-red-950/60 font-bold text-white' : i % 2 ? 'bg-ink-900 text-slate-200' : 'bg-ink-850 text-slate-200'}`}>
                           <span className="font-bold text-[#ff5a67]">{x.slot}</span>
                           <span className="flex items-center justify-between gap-2">
-                            {t?.name}
+                            <span className="flex items-center gap-2"><Flag code={t?.country} h="14px" />{t?.name}</span>
                             {x.qualified && <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-emerald-300">QUALIFIED</span>}
                           </span>
                         </div>
@@ -154,7 +155,7 @@ export default function TournamentView() {
                   <div className="flex items-center gap-3">
                     {t.logo_url ? <img src={t.logo_url} alt="" className="h-12 w-12 object-contain" /> : <span className="h-12 w-12 rounded bg-ink-800" />}
                     <div className="min-w-0">
-                      <div className="truncate font-bold uppercase text-white">{t.name}</div>
+                      <div className="flex items-center gap-1.5 truncate font-bold uppercase text-white"><Flag code={t.country} h="14px" />{t.name}</div>
                       {t.tag && <div className="text-xs font-semibold text-red-400">[{t.tag}]{t.invited ? ' · invited' : ''}</div>}
                     </div>
                   </div>
@@ -192,7 +193,7 @@ function Board({ entries, teamById }) {
           <div key={x.id} className={`grid ${cols} items-center gap-1 px-4 py-2.5 text-sm uppercase ${t?.is_ours ? 'bg-red-950/60 font-bold text-white' : i % 2 ? 'bg-ink-900 text-slate-200' : 'bg-ink-850 text-slate-200'}`}>
             <span className={`font-bold ${x.qualified ? 'text-emerald-300' : 'text-[#ff5a67]'}`}>{i + 1}</span>
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{t?.name}</span>
+              <Flag code={t?.country} h="14px" /><span className="truncate">{t?.name}</span>
               {x.qualified && <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-emerald-300">QUALIFIED</span>}
             </span>
             <span className="text-center text-slate-400">{x.mp || 0}</span>

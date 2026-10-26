@@ -4,6 +4,7 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useData } from '../lib/hooks'
 import ImageField from '../components/ImageField'
+import Flag from '../components/Flag'
 import { ErrorBox, Spinner } from '../components/ui'
 import { rank, totalOf } from '../lib/tournament'
 import bgGreen from '../assets/report/green.jpg'
@@ -260,7 +261,7 @@ export default function TournamentReport() {
                                 ? <img src={tm.logo_url} alt="" style={{ position: 'absolute', inset: '2.5mm 4mm 1.5mm', width: 'calc(100% - 8mm)', height: 'calc(100% - 4mm)', objectFit: 'contain' }} />
                                 : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: th.line, opacity: 0.35, fontSize: '30pt' }}>{String(tm?.name || '?').slice(0, 2)}</div>}
                             </div>
-                            <div style={{ height: '8mm', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 2mm', background: th.head, color: '#fff', fontSize: '10.5pt', letterSpacing: '.03em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tm?.name}</div>
+                            <div style={{ height: '8mm', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 2mm', background: th.head, color: '#fff', fontSize: '10.5pt', letterSpacing: '.03em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><Flag code={tm?.country} h="4mm" style={{ marginRight: '1.5mm' }} />{tm?.name}</div>
                           </div>
                         )
                       })}
@@ -294,6 +295,7 @@ export default function TournamentReport() {
                               <div style={{ display: 'grid', gridTemplateColumns: inner, alignItems: 'center', padding: '0 2mm', border: `0.4mm solid ${th.line}`, background: q ? th.fill : '#fff', color: q ? '#fff' : '#0b0b0b', fontSize: `${fs}pt`, letterSpacing: '.02em', textTransform: 'uppercase' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '2mm', minWidth: 0 }}>
                                   {tm?.logo_url && <img src={tm.logo_url} alt="" style={{ height: `${Math.min(h - 2, 9)}mm`, width: `${Math.min(h - 2, results ? 7 : 9)}mm`, objectFit: 'contain', flexShrink: 0 }} />}
+                                  <Flag code={tm?.country} h={`${Math.min(h - 3, 5)}mm`} />
                                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tm?.name}</span>
                                 </span>
                                 {results && (
@@ -410,6 +412,7 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
                 <span style={{ fontSize: '17pt' }}>#{n}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3mm', minWidth: 0 }}>
                   {tm?.logo_url ? <img src={tm.logo_url} alt="" style={{ height: '12mm', width: '12mm', objectFit: 'contain', flexShrink: 0 }} /> : <span style={{ width: '12mm', flexShrink: 0 }} />}
+                  <Flag code={tm?.country} h="6mm" />
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase', letterSpacing: '.03em' }}>{tm?.tag || tm?.name}</span>
                 </span>
                 <span style={num}>{Number(x.wwcd) || 0}</span>

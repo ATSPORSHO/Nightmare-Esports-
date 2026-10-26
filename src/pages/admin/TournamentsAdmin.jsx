@@ -41,7 +41,7 @@ export default function TournamentsAdmin() {
                 <li key={t.id} className={`flex flex-wrap items-center gap-3 py-3 ${st === 'ended' || st === 'hidden' ? 'opacity-50' : ''}`}>
                   {t.logo_url ? <img src={t.logo_url} alt="" className="h-12 w-12 rounded object-contain" /> : <span className="h-12 w-12 rounded bg-ink-800" />}
                   <div className="min-w-[180px] flex-1">
-                    <div className="font-medium text-white">{t.title}</div>
+                    <div className="font-medium text-white">{t.title}{t.scope === 'international' && <span className="ml-2 rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-300">International</span>}</div>
                     <div className="text-xs text-slate-500">{t.start_date}{t.end_date ? ` → ${t.end_date}` : ''}{t.prize_pool ? ` · ${t.prize_pool}` : ''}</div>
                   </div>
                   <span className={st === 'live' ? 'badge-green' : st === 'upcoming' ? 'badge-amber' : 'badge-accent'}>{st}</span>
@@ -82,6 +82,7 @@ function Form({ row, onClose, onSaved }) {
       title: f.title, logo_url: f.logo_url || null, prize_pool: f.prize_pool || null, start_date: f.start_date,
       end_date: f.end_date || null, teams: f.teams === '' || f.teams == null ? null : Number(f.teams),
       description: f.description || null, link_url: f.link_url || null, active: !!f.active,
+      ...(f.scope === 'international' || 'scope' in row ? { scope: f.scope || 'regional' } : {}),
       roadmap: (f.roadmap || []).filter((x) => (x.title || '').trim()).map((x) => ({ title: x.title.trim(), date: (x.date || '').trim(), note: (x.note || '').trim() })),
     }
     const q = supabase.from('tournaments')
@@ -94,6 +95,13 @@ function Form({ row, onClose, onSaved }) {
     <Modal title={row.id ? 'Edit tournament' : 'Add tournament'} onClose={onClose}>
       <form onSubmit={save} className="space-y-3">
         <Field label="Tournament name"><input className="input" required value={f.title} onChange={set('title')} placeholder="Nightmare Underdog Battle Season 2" /></Field>
+        <Field label="Tournament type" hint="International: you can add a country flag next to each team name. (Run supabase/international.sql once.)">
+          <div className="flex overflow-hidden rounded-lg border border-ink-600">
+            {[['regional', 'Regional'], ['international', 'International']].map(([k, l]) => (
+              <button type="button" key={k} onClick={() => setF({ ...f, scope: k })} className={`flex-1 px-4 py-2 text-sm font-semibold ${(f.scope || 'regional') === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
+            ))}
+          </div>
+        </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Starts"><input className="input" type="date" required value={f.start_date} onChange={set('start_date')} /></Field>
           <Field label="Ends (optional)"><input className="input" type="date" value={f.end_date || ''} onChange={set('end_date')} /></Field>
