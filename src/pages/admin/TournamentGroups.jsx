@@ -31,6 +31,7 @@ export default function TournamentGroups({ tournament, onClose }) {
   const teams = useData(() => supabase.from('tournament_teams').select('*').eq('tournament_id', tid).order('name'), [tid])
   const rounds = useData(() => supabase.from('tournament_rounds').select('*').eq('tournament_id', tid).order('sort'), [tid])
   const groups = useData(() => supabase.from('tournament_groups').select('*').eq('tournament_id', tid).order('sort'), [tid])
+  const plys = useData(() => supabase.from('tournament_team_players').select('*').order('sort'), [tid])
   const gts = useData(() => supabase.from('tournament_group_teams').select('*').eq('tournament_id', tid), [tid])
   const [names, setNames] = useState('')
   const [one, setOne] = useState({ name: '', tag: '', logo: null, invited: false })
@@ -47,8 +48,9 @@ export default function TournamentGroups({ tournament, onClose }) {
   const R = rounds.data || []
   const G = groups.data || []
   const GT = gts.data || []
+  const PL = plys.data || []
   const teamById = Object.fromEntries(T.map((t) => [t.id, t]))
-  const reload = () => { teams.reload(); rounds.reload(); groups.reload(); gts.reload() }
+  const reload = () => { teams.reload(); plys.reload(); rounds.reload(); groups.reload(); gts.reload() }
   const fail = (e) => { setErr(e?.message || String(e)); setBusy(false) }
 
   const active = R.find((r) => r.id === rid) || R[R.length - 1] || null
@@ -193,6 +195,16 @@ export default function TournamentGroups({ tournament, onClose }) {
                   <button type="button" title="Mark as our team (highlighted)" onClick={() => toggleOurs(t)}>{t.is_ours ? '★' : '☆'}</button>
                   <button type="button" title="Edit team: tag, logo, players" onClick={() => setEditTeam(t)} className="hover:text-white">{t.name}{t.tag ? ` [${t.tag}]` : ''}</button>
                   {t.invited && <span className="rounded bg-amber-500/20 px-1.5 text-[9px] font-bold text-amber-300">INVITED</span>}
+                  {PL.filter((p) => p.team_id === t.id).length > 0 && (
+                    <span className="flex items-center -space-x-1.5" title={PL.filter((p) => p.team_id === t.id).map((p) => p.name).join(', ')}>
+                      {PL.filter((p) => p.team_id === t.id).slice(0, 6).map((p) => (
+                        p.photo_url
+                          ? <img key={p.id} src={p.photo_url} alt={p.name} className="h-5 w-5 rounded-full border border-ink-900 object-cover" />
+                          : <span key={p.id} className="flex h-5 w-5 items-center justify-center rounded-full border border-ink-900 bg-ink-700 text-[9px] font-bold text-slate-300">{p.name.slice(0, 1)}</span>
+                      ))}
+                      <span className="pl-2.5 text-[10px] text-slate-400">{PL.filter((p) => p.team_id === t.id).length}</span>
+                    </span>
+                  )}
                   <button type="button" onClick={() => removeTeam(t)} className="text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
                 </span>
               ))}

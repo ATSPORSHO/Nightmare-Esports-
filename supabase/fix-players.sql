@@ -37,3 +37,14 @@ select column_name, is_nullable, column_default from information_schema.columns
  where table_schema = 'public' and table_name = 'tournament_team_players' order by ordinal_position;
 
 select pg_notify('pgrst', 'reload schema');
+
+-- make sure everybody can SEE players (public tournament page) and admins can edit them
+alter table public.tournament_team_players enable row level security;
+drop policy if exists "tournament_team_players read all"   on public.tournament_team_players;
+drop policy if exists "tournament_team_players admin write" on public.tournament_team_players;
+create policy "tournament_team_players read all"    on public.tournament_team_players for select to anon, authenticated using (true);
+create policy "tournament_team_players admin write" on public.tournament_team_players for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+grant select on public.tournament_team_players to anon;
+grant select, insert, update, delete on public.tournament_team_players to authenticated;
+select pg_notify('pgrst', 'reload schema');
