@@ -51,7 +51,10 @@ export default function TournamentReport() {
     ])
     const tids = (tm.data || []).map((x) => x.id)
     const pl = tids.length ? await supabase.from('tournament_team_players').select('*').in('team_id', tids).order('sort') : { data: [] }
-    return { data: { t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [] } }
+    const mt = await supabase.from('tournament_matches').select('id, group_id, number, created_at').eq('tournament_id', id)
+    const mids = (mt.data || []).map((m) => m.id)
+    const ps = mids.length ? await supabase.from('tmatch_player_stats').select('*').in('match_id', mids) : { data: [] }
+    return { data: { t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [], matches: mt.data || [], pstats: ps.data || [] } }
   }, [id])
   const [themeKey, setThemeKey] = useState(() => { try { return localStorage.getItem('reportTheme2') || 'blue' } catch { return 'blue' } })
   const [rid, setRid] = useState('all')
@@ -64,7 +67,7 @@ export default function TournamentReport() {
   if (loading || !data) return <div className="flex justify-center py-24"><Spinner /></div>
   if (!data.t) return <div className="py-24 text-center text-slate-400">Tournament not found.</div>
 
-  const { t, rounds, groups, gts, teams, players } = data
+  const { t, rounds, groups, gts, teams, players, matches, pstats } = data
   const th = THEMES.find((x) => x.key === themeKey) || THEMES[1]
   const teamById = Object.fromEntries(teams.map((x) => [x.id, x]))
   const roundById = Object.fromEntries(rounds.map((r) => [r.id, r]))
@@ -73,6 +76,8 @@ export default function TournamentReport() {
     .sort((a, b) => (roundById[a.round_id]?.sort || 0) - (roundById[b.round_id]?.sort || 0) || a.sort - b.sort)
   const results = mode === 'results'
   const standings = mode === 'standings'
+  const mvp = mode === 'mvp'
+  const land = standings || mvp
   const cards = !results && style === 'cards'
 
   const pickTheme = (k) => { setThemeKey(k); try { localStorage.setItem('reportTheme2', k) } catch { /* ignore */ } }
@@ -102,6 +107,25 @@ export default function TournamentReport() {
       for (let c = 0; c < chunks; c++) standPages.push({ key: `${sc.name}-${c}`, sc, ranked, slice: ranked.slice(c * 8, c * 8 + 8), offset: c * 8, played, c, chunks })
     })
   }
+  // ---- latest playing squad per team (the players ticked in its newest match)
+  const matchById = Object.fromEntries(matches.map((m) => [m.id, m]))
+  const lastSquad = (teamId) => {
+    const rows = pstats.filter((x) => x.team_id === teamId && matchById[x.match_id])
+    if (!rows.length) return []
+    const newest = rows.map((x) => matchById[x.match_id]).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.number - a.number)[0]
+    const ids = new Set(rows.filter((x) => x.match_id === newest.id).map((x) => x.player_id))
+    return players.filter((p) => p.team_id === teamId && ids.has(p.id))
+  }
+  // ---- MVP list: players ranked by eliminations over the matches of the chosen round(s)
+  const groupIds = new Set(pages.map((g) => g.id))
+  const kills = {}
+  pstats.forEach((x) => { if (groupIds.has(matchById[x.match_id]?.group_id)) { const a = (kills[x.player_id] ||= { k: 0, m: 0 }); a.k += Number(x.kills) || 0; a.m += 1 } })
+  const mvpList = players.filter((p) => kills[p.id]).map((p) => ({ p, team: teamById[p.team_id], k: kills[p.id].k, m: kills[p.id].m }))
+    .sort((a, b) => b.k - a.k || a.m - b.m || a.p.name.localeCompare(b.p.name))
+  const mvpPages = []
+  for (let i = 0; i < Math.min(10, mvpList.length); i += 5) mvpPages.push(mvpList.slice(i, i + 5))
+  const mvpSub = [rid === 'all' ? null : roundById[rid]?.name, 'MVP list', 'Most eliminations'].filter(Boolean).join('  ·  ')
+  const npages = mvp ? mvpPages.length : standings ? standPages.length : pages.length
   const titlePt = Math.min(48, Math.max(18, 760 / Math.max(title.length, 1)))
 
   return (
@@ -123,7 +147,7 @@ export default function TournamentReport() {
           <div>
             <span className="label">Print</span>
             <div className="flex overflow-hidden rounded-lg border border-ink-600">
-              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings']].map(([k, l]) => (
+              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings'], ['mvp', 'MVP list']].map(([k, l]) => (
                 <button key={k} onClick={() => setMode(k)} className={`px-4 py-2 text-xs font-semibold ${mode === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
               ))}
             </div>
@@ -133,7 +157,7 @@ export default function TournamentReport() {
               <input type="checkbox" checked={overall} onChange={(e) => setOverall(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Combine all groups of the round (overall standings)
             </label>
           )}
-          {!results && !standings && (
+          {!results && !land && (
             <div>
               <span className="label">Slot list style</span>
               <div className="flex overflow-hidden rounded-lg border border-ink-600">
@@ -154,7 +178,7 @@ export default function TournamentReport() {
               {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </label>
-          <button className="btn-primary" onClick={() => window.print()}><Printer size={16} /> Print / Save PDF ({standings ? standPages.length : pages.length} page{(standings ? standPages.length : pages.length) === 1 ? '' : 's'})</button>
+          <button className="btn-primary" onClick={() => window.print()}><Printer size={16} /> Print / Save PDF ({npages} page{npages === 1 ? '' : 's'})</button>
         </div>
         <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
           <ImageField label="Tournament logo (top right corner)" folder="tournament" value={t.logo_url} onChange={saveLogo} hint="PNG with a transparent background looks best." />
@@ -165,15 +189,23 @@ export default function TournamentReport() {
       </div>
 
       {/* ---------- A4 pages ---------- */}
+      {mvp && (
+        <div className="a4l-area overflow-x-auto">
+          {!mvpPages.length && <div className="card py-10 text-center text-sm text-slate-400">No player eliminations yet. In Tournaments → Results tick the players who played and type their eliminations (run supabase/match-players.sql once).</div>}
+          {mvpPages.map((list, i) => (
+            <MvpPage key={i} list={list} offset={i * 5} page={i} pages={mvpPages.length} sub={mvpSub} th={th} t={t} />
+          ))}
+        </div>
+      )}
       {standings && (
         <div className="a4l-area overflow-x-auto">
           {!standPages.length && <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div>}
           {standPages.map((sp) => (
-            <StandingsPage key={sp.key} sp={sp} th={th} t={t} teamById={teamById} players={players} />
+            <StandingsPage key={sp.key} sp={sp} th={th} t={t} teamById={teamById} players={players} lastSquad={lastSquad} />
           ))}
         </div>
       )}
-      <div className={`a4-area overflow-x-auto ${standings ? 'hidden' : ''}`}>
+      <div className={`a4-area overflow-x-auto ${land ? 'hidden' : ''}`}>
         {!pages.length && <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div>}
         {pages.map((g) => {
           const round = roundById[g.round_id]
@@ -317,11 +349,12 @@ export default function TournamentReport() {
 }
 
 /** Current standings, broadcast style: leader photo on the left, 8 teams per page on the right (A4 landscape). */
-function StandingsPage({ sp, th, t, teamById, players }) {
+function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
   const { ranked, slice, offset, played, c, chunks, sc } = sp
   const leader = teamById[ranked[0]?.team_id]
   // squad order: 6 players -> 6,3,1,2,4,5 ; 5 players -> 4,3,1,2,5 ; fewer -> simple order
-  const all = leader ? players.filter((p) => p.team_id === leader.id).slice(0, 6) : []
+  const playing = leader ? lastSquad(leader.id) : []   // the players ticked in the team's latest match
+  const all = leader ? (playing.length ? playing : players.filter((p) => p.team_id === leader.id)).slice(0, 6) : []
   const withPhoto = all.filter((p) => p.photo_url)
   const base = withPhoto.length ? withPhoto : []
   const ORD = { 6: [6, 3, 1, 2, 4, 5], 5: [4, 3, 1, 2, 5], 4: [3, 1, 2, 4], 3: [3, 1, 2], 2: [1, 2], 1: [1] }
@@ -394,6 +427,47 @@ function StandingsPage({ sp, th, t, teamById, players }) {
       {/* footer: sponsor + page */}
       <div style={{ position: 'absolute', left: '48%', right: '4%', bottom: '6mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9pt', letterSpacing: '.15em', textTransform: 'uppercase', opacity: 0.9 }}>
         <span>{chunks > 1 ? `Page ${c + 1} / ${chunks}` : ''}</span>
+        {t.sponsor_url && <span style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>Sponsored by <img src={t.sponsor_url} alt="" style={{ height: '11mm', maxWidth: '35mm', objectFit: 'contain' }} /></span>}
+      </div>
+    </section>
+  )
+}
+
+/** MVP list: top players by eliminations (5 per landscape page): photo, name, team, elims. */
+function MvpPage({ list, offset, page, pages, sub, th, t }) {
+  const n = list.length
+  return (
+    <section
+      className="a4-page relative mx-auto mb-6 overflow-hidden shadow-xl"
+      style={{ width: '297mm', height: '210mm', backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.82) 0, rgba(0,0,0,.7) 34mm, rgba(0,0,0,.3) 50mm, rgba(0,0,0,.5) 100%), url(${th.bg})`, backgroundSize: 'cover', backgroundPosition: 'center', color: '#fff', fontFamily: FONT, fontWeight: 400 }}
+    >
+      {t.logo_url && <img src={t.logo_url} alt="" style={{ position: 'absolute', right: '10mm', top: '8mm', height: '22mm', maxWidth: '40mm', objectFit: 'contain', objectPosition: 'right top' }} />}
+      <div style={{ position: 'absolute', left: '12mm', right: '55mm', top: '10mm', textAlign: 'left' }}>
+        <div style={{ fontSize: '32pt', lineHeight: 1, letterSpacing: '.06em', textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{t.title}</div>
+        <div style={{ marginTop: '2mm', fontSize: '13pt', letterSpacing: '.2em', textTransform: 'uppercase', color: th.line, filter: 'brightness(1.6)' }}>{sub}</div>
+      </div>
+      <div style={{ position: 'absolute', left: '12mm', right: '12mm', top: '38mm', bottom: '22mm', display: 'flex', justifyContent: 'center', gap: '5mm' }}>
+        {list.map((x, i) => (
+          <div key={x.p.id} style={{ width: '50mm', display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,.55)', border: `0.5mm solid ${th.line}`, overflow: 'hidden' }}>
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, background: `linear-gradient(180deg, ${th.block}, rgba(0,0,0,.6))` }}>
+              {x.p.photo_url
+                ? <img src={x.p.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
+                : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '60pt', opacity: 0.35 }}>{x.p.name.slice(0, 1)}</div>}
+              <span style={{ position: 'absolute', left: '2.5mm', top: '2mm', fontSize: '20pt', lineHeight: 1, textShadow: '0 1px 4px rgba(0,0,0,.7)' }}>#{offset + i + 1}</span>
+              {x.team?.logo_url && <img src={x.team.logo_url} alt="" style={{ position: 'absolute', right: '2mm', top: '2mm', height: '13mm', width: '13mm', objectFit: 'contain' }} />}
+            </div>
+            <div style={{ background: th.block, borderTop: `0.4mm solid ${th.line}`, borderBottom: `0.4mm solid ${th.line}`, textAlign: 'center', padding: '1.6mm 1mm', fontSize: '17pt', letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.p.name}</div>
+            <div style={{ padding: '3mm 2mm 3.5mm', textAlign: 'center' }}>
+              <div style={{ fontSize: '11pt', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.team?.tag || x.team?.name}</div>
+              <div style={{ marginTop: '2mm', fontSize: '10pt', letterSpacing: '.2em', opacity: 0.75 }}>ELIMS</div>
+              <div style={{ fontSize: '40pt', lineHeight: 1 }}>{x.k}</div>
+            </div>
+          </div>
+        ))}
+        {n === 0 && null}
+      </div>
+      <div style={{ position: 'absolute', left: '12mm', right: '12mm', bottom: '6mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9pt', letterSpacing: '.15em', textTransform: 'uppercase', opacity: 0.9 }}>
+        <span>{pages > 1 ? `Page ${page + 1} / ${pages}` : ''}</span>
         {t.sponsor_url && <span style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>Sponsored by <img src={t.sponsor_url} alt="" style={{ height: '11mm', maxWidth: '35mm', objectFit: 'contain' }} /></span>}
       </div>
     </section>

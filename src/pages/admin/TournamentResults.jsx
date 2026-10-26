@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Plus, Save, Trash2, Award } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
@@ -27,6 +27,13 @@ export default function TournamentResults({ tournament, onClose }) {
     return supabase.from('tournament_match_results').select('*').in('match_id', ids)
   }, [tid])
 
+  const players = useData(() => supabase.from('tournament_team_players').select('*').order('sort'), [tid])
+  const pstats = useData(async () => {
+    const ms = await supabase.from('tournament_matches').select('id').eq('tournament_id', tid)
+    const ids = (ms.data || []).map((m) => m.id)
+    if (!ids.length) return { data: [] }
+    return supabase.from('tmatch_player_stats').select('*').in('match_id', ids)
+  }, [tid])
   const [rid, setRid] = useState(null)
   const [gid, setGid] = useState(null)
   const [mid, setMid] = useState(null)
@@ -41,8 +48,10 @@ export default function TournamentResults({ tournament, onClose }) {
   const T = teams.data || []
   const M = matches.data || []
   const RES = results.data || []
+  const PL = players.data || []
+  const PS = pstats.data || []
   const teamById = Object.fromEntries(T.map((t) => [t.id, t]))
-  const reloadAll = () => { matches.reload(); results.reload(); gts.reload() }
+  const reloadAll = () => { matches.reload(); results.reload(); gts.reload(); pstats.reload() }
 
   const round = R.find((r) => r.id === rid) || R[R.length - 1] || null
   const gList = G.filter((g) => g.round_id === round?.id)
@@ -54,13 +63,26 @@ export default function TournamentResults({ tournament, onClose }) {
   // load the saved numbers of the selected match into the form
   useEffect(() => {
     const d = {}
-    if (match) RES.filter((r) => r.match_id === match.id).forEach((r) => { d[r.team_id] = { placement: r.placement ?? '', kills: r.kills ?? 0 } })
+    if (match) {
+      RES.filter((r) => r.match_id === match.id).forEach((r) => { d[r.team_id] = { placement: r.placement ?? '', kills: r.kills ?? 0, sel: {} } })
+      PS.filter((x) => x.match_id === match.id).forEach((x) => { const e = (d[x.team_id] ||= { placement: '', kills: 0, sel: {} }); (e.sel ||= {})[x.player_id] = x.kills ?? 0 })
+    }
     setDraft(d)
     setMsg(''); setErr('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [match?.id, results.data])
+  }, [match?.id, results.data, pstats.data])
 
   const setCell = (teamId, k, v) => setDraft((d) => ({ ...d, [teamId]: { ...(d[teamId] || {}), [k]: v } }))
+  // players who played: toggle (max 4) and type their eliminations; team kills = sum of player kills when typed
+  const togglePlayer = (teamId, pid) => setDraft((d) => {
+    const cur = { ...(d[teamId]?.sel || {}) }
+    if (pid in cur) delete cur[pid]
+    else { if (Object.keys(cur).length >= 4) { setErr('Only 4 players can play a match. Untick one first.'); return d } cur[pid] = 0 }
+    return { ...d, [teamId]: { ...(d[teamId] || {}), sel: cur } }
+  })
+  const setPlayerKills = (teamId, pid, v) => setDraft((d) => ({ ...d, [teamId]: { ...(d[teamId] || {}), sel: { ...(d[teamId]?.sel || {}), [pid]: v } } }))
+  const playerSum = (teamId) => Object.values(draft[teamId]?.sel || {}).reduce((t, v) => t + (Number(v) || 0), 0)
+  const teamKills = (teamId) => (playerSum(teamId) > 0 ? playerSum(teamId) : Number(draft[teamId]?.kills) || 0)
 
   /** re-add every saved match of this group into the group table */
   const recompute = async (groupId) => {
@@ -100,7 +122,7 @@ export default function TournamentResults({ tournament, onClose }) {
   const saveMatch = async () => {
     if (!match) return
     setErr(''); setMsg('')
-    const entered = rows.map((x) => ({ team_id: x.team_id, placement: Number(draft[x.team_id]?.placement), kills: Number(draft[x.team_id]?.kills) || 0, has: draft[x.team_id]?.placement !== '' && draft[x.team_id]?.placement != null }))
+    const entered = rows.map((x) => ({ team_id: x.team_id, placement: Number(draft[x.team_id]?.placement), kills: teamKills(x.team_id), sel: draft[x.team_id]?.sel || {}, has: draft[x.team_id]?.placement !== '' && draft[x.team_id]?.placement != null }))
     const played = entered.filter((e) => e.has)
     if (played.some((e) => !Number.isInteger(e.placement) || e.placement < 1 || e.placement > 25)) return setErr('Placement must be a whole number from 1 to 25.')
     const seen = new Set()
@@ -112,6 +134,12 @@ export default function TournamentResults({ tournament, onClose }) {
       if (del.error) throw del.error
       const ins = await supabase.from('tournament_match_results').insert(played.map((e) => ({ match_id: match.id, team_id: e.team_id, placement: e.placement, kills: e.kills })))
       if (ins.error) throw ins.error
+      const dp = await supabase.from('tmatch_player_stats').delete().eq('match_id', match.id)
+      const prow = played.flatMap((e) => Object.entries(e.sel).map(([player_id, k]) => ({ match_id: match.id, team_id: e.team_id, player_id, kills: Number(k) || 0 })))
+      if (prow.length) {
+        const ip = await supabase.from('tmatch_player_stats').insert(prow)
+        if (dp.error || ip.error) throw new Error(`Match saved, but the players could not be saved: ${(dp.error || ip.error).message} (run supabase/match-players.sql once in Supabase)`)
+      }
       await recompute(group.id)
       setMsg(`Match ${match.number} saved. Totals updated.`)
       reloadAll()
@@ -187,7 +215,7 @@ export default function TournamentResults({ tournament, onClose }) {
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-sm font-semibold text-white">{group.name} · Match {match.number}</div>
-                    <div className="text-[11px] text-slate-500">Placement points: 1st=10, 2nd=6, 3rd=5, 4th=4, 5th=3, 6th=2, 7th–8th=1, then 0. Kill = 1 point. Leave placement empty if a team did not play.</div>
+                    <div className="text-[11px] text-slate-500">Placement points: 1st=10, 2nd=6, 3rd=5, 4th=4, 5th=3, 6th=2, 7th–8th=1, then 0. Kill = 1 point. Leave placement empty if a team did not play. Tick the players who played (max 4) and type their eliminations: team kills become their sum.</div>
                   </div>
                   <div className="overflow-x-auto rounded-lg border border-ink-700">
                     <table className="w-full text-sm">
@@ -198,15 +226,41 @@ export default function TournamentResults({ tournament, onClose }) {
                         {rows.map((x) => {
                           const t = teamById[x.team_id]
                           const pp = live(x.team_id)
+                          const tp = PL.filter((p) => p.team_id === x.team_id)
+                          const sel = draft[x.team_id]?.sel || {}
                           return (
-                            <tr key={x.id} className="border-t border-ink-700/60">
+                            <Fragment key={x.id}>
+                            <tr className="border-t border-ink-700/60">
                               <td className="px-3 py-1.5 text-slate-400">{x.slot}</td>
                               <td className="px-3 py-1.5"><span className="flex items-center gap-2">{t?.logo_url && <img src={t.logo_url} alt="" className="h-6 w-6 object-contain" />}<span className={t?.is_ours ? 'font-semibold text-white' : ''}>{t?.name}</span></span></td>
                               <td className="px-2 py-1.5 text-center"><input className="input !w-16 !px-1 !py-0.5 text-center" type="number" min="1" max="25" value={draft[x.team_id]?.placement ?? ''} onChange={(e) => setCell(x.team_id, 'placement', e.target.value)} /></td>
-                              <td className="px-2 py-1.5 text-center"><input className="input !w-16 !px-1 !py-0.5 text-center" type="number" min="0" value={draft[x.team_id]?.kills ?? ''} onChange={(e) => setCell(x.team_id, 'kills', e.target.value)} /></td>
+                              <td className="px-2 py-1.5 text-center"><input className="input !w-16 !px-1 !py-0.5 text-center" type="number" min="0" disabled={playerSum(x.team_id) > 0} title={playerSum(x.team_id) > 0 ? 'Sum of the player eliminations below' : ''} value={playerSum(x.team_id) > 0 ? playerSum(x.team_id) : (draft[x.team_id]?.kills ?? '')} onChange={(e) => setCell(x.team_id, 'kills', e.target.value)} /></td>
                               <td className="px-2 py-1.5 text-center text-slate-300">{pp ?? '—'}</td>
-                              <td className="px-2 py-1.5 text-center font-semibold text-white">{pp == null ? '—' : pp + (Number(draft[x.team_id]?.kills) || 0)}</td>
+                              <td className="px-2 py-1.5 text-center font-semibold text-white">{pp == null ? '—' : pp + teamKills(x.team_id)}</td>
                             </tr>
+                            {tp.length > 0 && (
+                              <tr>
+                                <td />
+                                <td colSpan={5} className="px-3 pb-2">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[10px] uppercase tracking-wider text-slate-500">Played ({Object.keys(sel).length}/4)</span>
+                                    {tp.map((p) => {
+                                      const on = p.id in sel
+                                      return (
+                                        <span key={p.id} className={`flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-2 text-xs ${on ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-400'}`}>
+                                          <button type="button" onClick={() => togglePlayer(x.team_id, p.id)} className="flex items-center gap-1" title={on ? 'Click to remove' : 'Click: this player played'}>
+                                            {p.photo_url ? <img src={p.photo_url} alt="" className="h-5 w-5 rounded-full object-cover" /> : <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink-700 text-[9px] font-bold">{p.name.slice(0, 1)}</span>}
+                                            {p.name}
+                                          </button>
+                                          {on && <input type="number" min="0" title="Eliminations" placeholder="K" className="input !w-12 !px-1 !py-0 text-center text-xs" value={sel[p.id] ?? 0} onChange={(e) => setPlayerKills(x.team_id, p.id, e.target.value)} />}
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </Fragment>
                           )
                         })}
                       </tbody>
