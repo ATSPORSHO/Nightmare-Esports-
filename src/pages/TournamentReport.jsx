@@ -364,7 +364,7 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
   return (
     <section
       className="a4-page relative mx-auto mb-6 overflow-hidden shadow-xl"
-      style={{ width: '297mm', height: '210mm', backgroundImage: `linear-gradient(90deg, rgba(0,0,0,.05), rgba(0,0,0,.55)), url(${th.bg})`, backgroundSize: 'cover', backgroundPosition: 'center 35%', color: '#fff', fontFamily: FONT, fontWeight: 400 }}
+      style={{ width: '297mm', height: '210mm', backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.82) 0, rgba(0,0,0,.7) 34mm, rgba(0,0,0,.3) 50mm, rgba(0,0,0,.5) 100%), url(${th.bg})`, backgroundSize: 'cover', backgroundPosition: 'center', color: '#fff', fontFamily: FONT, fontWeight: 400 }}
     >
       {/* left: #1 team photo */}
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '46%', overflow: 'hidden' }}>
@@ -381,7 +381,7 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
               </div>
             )
             : leader?.logo_url && <img src={leader.logo_url} alt="" style={{ position: 'absolute', left: '15%', top: '22%', width: '70%', height: '50%', objectFit: 'contain' }} />}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 38%), linear-gradient(90deg, rgba(0,0,0,0) 62%, rgba(0,0,0,.5) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'transparent' }} />
         {t.logo_url && <img src={t.logo_url} alt="" style={{ position: 'absolute', left: '8mm', top: '7mm', height: '20mm', maxWidth: '40mm', objectFit: 'contain', objectPosition: 'left top' }} />}
         {leader && (
           <div style={{ position: 'absolute', left: '8mm', bottom: '8mm', display: 'flex', alignItems: 'center', gap: '4mm' }}>
