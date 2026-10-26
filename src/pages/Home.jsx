@@ -8,6 +8,8 @@ import { useLineup } from '../context/LineupContext'
 import { num } from '../lib/format'
 import { Spinner } from '../components/ui'
 import SocialLinks from '../components/SocialLinks'
+import Countdown from '../components/Countdown'
+import RegisterModal from '../components/RegisterModal'
 
 const fmtDate = (d) =>
   new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
@@ -43,6 +45,15 @@ export default function Home() {
   const dashOpen = role !== 'guest' || settings.guest_enabled
   const [d, setD] = useState(null)
   const [showAll, setShowAll] = useState(false)
+  const [regFor, setRegFor] = useState(null)
+  const [tick, setTick] = useState(0) // re-evaluates registration state when a countdown ends
+  const regState = (t) => {
+    if (!t.reg_start && !t.reg_end && !t.reg_enabled) return 'none'
+    const now = Date.now()
+    if (t.reg_start && now < new Date(t.reg_start).getTime()) return 'soon'
+    if (t.reg_enabled && (!t.reg_end || now <= new Date(t.reg_end).getTime())) return 'open'
+    return 'closed'
+  }
 
   useEffect(() => {
     let alive = true
@@ -101,6 +112,7 @@ export default function Home() {
 
   return (
     <div className="space-y-5">
+      {regFor && <RegisterModal tournament={regFor} onClose={() => setRegFor(null)} />}
       {/* ---------- hero ---------- */}
       <section
         className="dark-scope relative overflow-hidden rounded-2xl border border-red-900/60 px-6 py-10 shadow-[0_0_60px_-25px_rgba(200,16,46,.7)] sm:px-10 sm:py-14"
@@ -222,9 +234,22 @@ export default function Home() {
                       {t.prize_pool && <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Prize pool</div><div className="font-display text-lg font-extrabold text-amber-300">{t.prize_pool}</div></div>}
                       <div><div className="text-[10px] uppercase tracking-wider text-slate-400">{t.end_date ? 'Dates' : 'Starts'}</div><div className="text-sm font-semibold text-white">{fmtDay(t.start_date)}{t.end_date ? ` – ${fmtDay(t.end_date)}` : ''}</div></div>
                       {t.teams ? <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Teams</div><div className="text-sm font-semibold text-white">{t.teams}</div></div> : null}
-                      <Link to={`/tournament/${t.id}`} className="btn-ghost btn-sm ml-auto">Groups &amp; slots <ArrowRight size={13} /></Link>
+                      {['none', 'closed'].includes(regState(t)) && <Link to={`/tournament/${t.id}`} className="btn-ghost btn-sm ml-auto">Groups &amp; slots <ArrowRight size={13} /></Link>}
+                      {regState(t) === 'open' && <button type="button" className="btn-primary btn-sm ml-auto" onClick={() => setRegFor(t)}>Register your team <ArrowRight size={13} /></button>}
                       {t.link_url && <a href={t.link_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm">Details <ArrowRight size={13} /></a>}
                     </div>
+                    {regState(t) === 'soon' && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-800/60 bg-red-950/30 px-3 py-2.5" data-tick={tick}>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-red-300">Registration opens in</div>
+                        <Countdown to={t.reg_start} onDone={() => setTick((n) => n + 1)} />
+                      </div>
+                    )}
+                    {regState(t) === 'open' && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-700/60 bg-emerald-950/30 px-3 py-2.5" data-tick={tick}>
+                        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> Registration open{t.reg_end ? ' · closes in' : ''}</div>
+                        {t.reg_end && <Countdown to={t.reg_end} onDone={() => setTick((n) => n + 1)} />}
+                      </div>
+                    )}
                     {Array.isArray(t.roadmap) && t.roadmap.length > 0 && (
                       <div className="mt-4 border-t border-red-900/50 pt-3">
                         <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-red-400"><Flag size={12} /> Tournament roadmap</div>

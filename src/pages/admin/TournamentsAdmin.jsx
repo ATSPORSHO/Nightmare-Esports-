@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Flag, Users, FileText, ListOrdered } from 'lucide-react'
+import { Plus, Pencil, Trash2, Flag, Users, FileText, ListOrdered, ClipboardList } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { todayStr } from '../../lib/format'
@@ -8,6 +8,7 @@ import { Card, ErrorBox, Field, Modal, Spinner } from '../../components/ui'
 import ImageField from '../../components/ImageField'
 import TournamentGroups from './TournamentGroups'
 import TournamentResults from './TournamentResults'
+import RegistrationsAdmin from './RegistrationsAdmin'
 
 export default function TournamentsAdmin() {
   const { data, loading, error, reload } = useData(() => supabase.from('tournaments').select('*').order('start_date', { ascending: false }))
@@ -15,6 +16,7 @@ export default function TournamentsAdmin() {
   const [ending, setEnding] = useState(null)
   const [grouping, setGrouping] = useState(null)
   const [scoring, setScoring] = useState(null)
+  const [regs, setRegs] = useState(null)
   const today = todayStr()
 
   const state = (t) => (t.ended ? 'ended' : !t.active ? 'hidden' : t.end_date && t.end_date < today ? 'ended' : t.start_date > today ? 'upcoming' : 'live')
@@ -50,6 +52,7 @@ export default function TournamentsAdmin() {
                   </label>
                   <Link to={`/tournament/${t.id}/report`} className="btn-ghost btn-sm" title="A4 slot list report, one group per page"><FileText size={13} /> A4 report</Link>
  <button className="btn-ghost btn-sm" title="Enter results match by match" onClick={() => setScoring(t)}><ListOrdered size={13} /> Results</button>
+ {(t.reg_enabled || t.reg_start || t.reg_end) && <button className="btn-ghost btn-sm" title="Teams that registered" onClick={() => setRegs(t)}><ClipboardList size={13} /> Registrations</button>}
                   <button className="btn-ghost btn-sm" title="Add teams and draw groups" onClick={() => setGrouping(t)}><Users size={13} /> Teams &amp; groups</button>
                   {!t.ended && <button className="btn-ghost btn-sm text-amber-300" title="End tournament and add it to Successful events" onClick={() => setEnding(t)}><Flag size={13} /> End</button>}
                   <button className="btn-ghost btn-sm" onClick={() => setEditing(t)}><Pencil size={13} /></button>
@@ -61,6 +64,7 @@ export default function TournamentsAdmin() {
           </ul>
         )}
       </Card>
+      {regs && <RegistrationsAdmin tournament={regs} onClose={() => setRegs(null)} />}
       {scoring && <TournamentResults tournament={scoring} onClose={() => setScoring(null)} />}
       {grouping && <TournamentGroups tournament={grouping} onClose={() => setGrouping(null)} />}
       {ending && <EndForm t={ending} onClose={() => setEnding(null)} onDone={() => { setEnding(null); reload() }} />}
@@ -70,7 +74,8 @@ export default function TournamentsAdmin() {
 }
 
 function Form({ row, onClose, onSaved }) {
-  const [f, setF] = useState({ title: '', logo_url: null, prize_pool: '', start_date: todayStr(), end_date: '', teams: '', description: '', link_url: '', active: true, ...row, roadmap: Array.isArray(row.roadmap) ? row.roadmap : [] })
+  const toLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const [f, setF] = useState({ reg_enabled: false, reg_start_l: toLocal(row.reg_start), reg_end_l: toLocal(row.reg_end), title: '', logo_url: null, prize_pool: '', start_date: todayStr(), end_date: '', teams: '', description: '', link_url: '', active: true, ...row, roadmap: Array.isArray(row.roadmap) ? row.roadmap : [] })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -82,6 +87,7 @@ function Form({ row, onClose, onSaved }) {
       title: f.title, logo_url: f.logo_url || null, prize_pool: f.prize_pool || null, start_date: f.start_date,
       end_date: f.end_date || null, teams: f.teams === '' || f.teams == null ? null : Number(f.teams),
       description: f.description || null, link_url: f.link_url || null, active: !!f.active,
+      ...((f.reg_enabled || f.reg_start_l || f.reg_end_l || 'reg_enabled' in row) ? { reg_enabled: !!f.reg_enabled, reg_start: f.reg_start_l ? new Date(f.reg_start_l).toISOString() : null, reg_end: f.reg_end_l ? new Date(f.reg_end_l).toISOString() : null } : {}),
       ...(f.scope === 'international' || 'scope' in row ? { scope: f.scope || 'regional' } : {}),
     }
     const roadmap = (f.roadmap || []).filter((x) => (x.title || '').trim()).map((x) => ({ title: x.title.trim(), date: (x.date || '').trim(), note: (x.note || '').trim() }))
@@ -116,6 +122,15 @@ function Form({ row, onClose, onSaved }) {
         <Field label="Short description (optional)"><input className="input" value={f.description || ''} onChange={set('description')} /></Field>
         <Field label="Registration / watch link (optional)"><input className="input" value={f.link_url || ''} onChange={set('link_url')} placeholder="https://" /></Field>
         <ImageField label="Tournament logo" folder="tournament" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+        <div className="rounded-xl border border-ink-600 bg-ink-850 p-3">
+          <div className="label">Team registration (run supabase/registration.sql once)</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Registration opens (countdown shows until then)"><input className="input" type="datetime-local" value={f.reg_start_l} onChange={set('reg_start_l')} /></Field>
+            <Field label="Registration closes"><input className="input" type="datetime-local" value={f.reg_end_l} onChange={set('reg_end_l')} /></Field>
+          </div>
+          <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!f.reg_enabled} onChange={(e) => setF({ ...f, reg_enabled: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" /> Activate registration (teams can register between the two times)</label>
+          <p className="mt-1 text-[11px] text-slate-500">Before the opening time visitors see a countdown. While registration is open they see a Register button. After it closes (or when you untick the box) the Groups &amp; slots button appears on the home page. Leave all empty for no registration.</p>
+        </div>
         <div>
           <div className="label">Roadmap (stages of the tournament, shown to visitors)</div>
           <div className="space-y-2">
