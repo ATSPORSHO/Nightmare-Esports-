@@ -83,12 +83,17 @@ function Form({ row, onClose, onSaved }) {
       end_date: f.end_date || null, teams: f.teams === '' || f.teams == null ? null : Number(f.teams),
       description: f.description || null, link_url: f.link_url || null, active: !!f.active,
       ...(f.scope === 'international' || 'scope' in row ? { scope: f.scope || 'regional' } : {}),
-      roadmap: (f.roadmap || []).filter((x) => (x.title || '').trim()).map((x) => ({ title: x.title.trim(), date: (x.date || '').trim(), note: (x.note || '').trim() })),
     }
+    const roadmap = (f.roadmap || []).filter((x) => (x.title || '').trim()).map((x) => ({ title: x.title.trim(), date: (x.date || '').trim(), note: (x.note || '').trim() }))
     const q = supabase.from('tournaments')
-    const { error } = row.id ? await q.update(payload).eq('id', row.id) : await q.insert(payload)
+    const res = row.id ? await q.update(payload).eq('id', row.id).select('id').single() : await q.insert(payload).select('id').single()
+    if (res.error) { setBusy(false); return setErr(res.error.message) }
+    // the roadmap is saved on its own so a missing column gives a clear message
+    const rm = await supabase.from('tournaments').update({ roadmap }).eq('id', res.data.id).select('roadmap').single()
     setBusy(false)
-    if (error) setErr(error.message); else onSaved()
+    if (rm.error) return setErr(/roadmap/.test(rm.error.message) ? 'The tournament was saved, but the roadmap column is missing in the database. Run supabase/roadmap.sql once in Supabase (SQL Editor), then press Save again.' : rm.error.message)
+    if (roadmap.length && (rm.data?.roadmap || []).length !== roadmap.length) return setErr('The roadmap could not be stored (database blocked it). Send me this message.')
+    onSaved()
   }
 
   return (
