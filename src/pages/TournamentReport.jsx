@@ -7,6 +7,7 @@ import ImageField from '../components/ImageField'
 import Flag from '../components/Flag'
 import { ErrorBox, Spinner } from '../components/ui'
 import { rank, totalOf } from '../lib/tournament'
+import { placementPoints } from '../lib/points'
 import bgGreen from '../assets/report/green.jpg'
 import bgBlue from '../assets/report/blue.jpg'
 import bgRed from '../assets/report/red.jpg'
@@ -55,7 +56,8 @@ export default function TournamentReport() {
     const mt = await supabase.from('tournament_matches').select('id, group_id, number, created_at').eq('tournament_id', id)
     const mids = (mt.data || []).map((m) => m.id)
     const ps = mids.length ? await supabase.from('tmatch_player_stats').select('*').in('match_id', mids) : { data: [] }
-    return { data: { t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [], matches: mt.data || [], pstats: ps.data || [] } }
+    const mr = mids.length ? await supabase.from('tournament_match_results').select('match_id, team_id, placement, kills').in('match_id', mids) : { data: [] }
+    return { data: { t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [], matches: mt.data || [], pstats: ps.data || [], mres: mr.data || [] } }
   }, [id])
   const [themeKey, setThemeKey] = useState(() => { try { return localStorage.getItem('reportTheme2') || 'blue' } catch { return 'blue' } })
   const [rid, setRid] = useState('all')
@@ -68,7 +70,7 @@ export default function TournamentReport() {
   if (loading || !data) return <div className="flex justify-center py-24"><Spinner /></div>
   if (!data.t) return <div className="py-24 text-center text-slate-400">Tournament not found.</div>
 
-  const { t, rounds, groups, gts, teams, players, matches, pstats } = data
+  const { t, rounds, groups, gts, teams, players, matches, pstats, mres } = data
   const th = THEMES.find((x) => x.key === themeKey) || THEMES[1]
   const teamById = Object.fromEntries(teams.map((x) => [x.id, x]))
   const roundById = Object.fromEntries(rounds.map((r) => [r.id, r]))
@@ -103,9 +105,26 @@ export default function TournamentReport() {
       : pages.map((g) => ({ name: g.name, round: roundById[g.round_id]?.name, rows: gts.filter((x) => x.group_id === g.id) }))
     scopes.forEach((sc) => {
       const ranked = rank(sc.rows)
+      // rank change since the match before the latest one (up / down / same)
+      const gset = new Set(sc.rows.map((x) => x.group_id))
+      const gm = matches.filter((m) => gset.has(m.group_id))
+      const lastOf = {}
+      gm.forEach((m) => { if (!lastOf[m.group_id] || m.number > lastOf[m.group_id].number) lastOf[m.group_id] = m })
+      const lastIds = new Set(Object.values(lastOf).map((m) => m.id))
+      const hasPrev = Object.keys(lastOf).some((gid) => gm.filter((m) => m.group_id === gid).length >= 2)
+      const delta = {}
+      if (hasPrev) {
+        const prevRows = sc.rows.map((x) => {
+          const r = mres.find((y) => lastIds.has(y.match_id) && y.team_id === x.team_id && y.placement != null)
+          if (!r) return x
+          return { ...x, place_pts: (Number(x.place_pts) || 0) - placementPoints(r.placement), kill_pts: (Number(x.kill_pts) || 0) - (Number(r.kills) || 0), wwcd: (Number(x.wwcd) || 0) - (r.placement === 1 ? 1 : 0) }
+        })
+        const before = rank(prevRows).map((x) => x.team_id)
+        ranked.forEach((x, i) => { delta[x.team_id] = before.indexOf(x.team_id) - i })
+      }
       const played = Math.max(0, ...sc.rows.map((x) => Number(x.mp) || 0))
       const chunks = Math.max(1, Math.ceil(ranked.length / 8))
-      for (let c = 0; c < chunks; c++) standPages.push({ key: `${sc.name}-${c}`, sc, ranked, slice: ranked.slice(c * 8, c * 8 + 8), offset: c * 8, played, c, chunks })
+      for (let c = 0; c < chunks; c++) standPages.push({ key: `${sc.name}-${c}`, sc, ranked, slice: ranked.slice(c * 8, c * 8 + 8), offset: c * 8, played, c, chunks, delta })
     })
   }
   // ---- latest playing squad per team (the players ticked in its newest match)
@@ -350,7 +369,7 @@ export default function TournamentReport() {
 
 /** Current standings, broadcast style: leader photo on the left, 8 teams per page on the right (A4 landscape). */
 function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
-  const { ranked, slice, offset, played, c, chunks, sc } = sp
+  const { ranked, slice, offset, played, c, chunks, sc, delta } = sp
   const leader = teamById[ranked[0]?.team_id]
   // squad order: 6 players -> 6,3,1,2,4,5 ; 5 players -> 4,3,1,2,5 ; fewer -> simple order
   const playing = leader ? lastSquad(leader.id) : []   // the players ticked in the team's latest match
@@ -361,7 +380,7 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
   const squad = (ORD[base.length] || []).map((n) => base[n - 1]).filter(Boolean)
   const mid = (squad.length - 1) / 2
   const sub = [sc.round, sc.name, 'Current standings', played > 0 ? `${played} match${played === 1 ? '' : 'es'} played` : null].filter(Boolean).join('  ·  ')
-  const cols = '15mm 1fr 14mm 22mm 18mm 24mm'
+  const cols = '6mm 13mm 1fr 14mm 22mm 18mm 24mm'
   const num = { textAlign: 'center' }
   return (
     <section
@@ -399,8 +418,8 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
         <div style={{ fontSize: '24pt', lineHeight: 1, letterSpacing: '.03em', textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{t.title}</div>
         <div style={{ marginTop: '1.5mm', fontSize: '11pt', letterSpacing: '.14em', textTransform: 'uppercase', color: th.line, filter: 'brightness(1.5)' }}>{sub}</div>
         <div style={{ marginTop: '5mm', background: 'rgba(0,0,0,.35)', borderTop: `0.6mm solid ${th.line}` }}>
-          <div style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '9mm', padding: '0 4mm', fontSize: '11pt', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.9 }}>
-            <span>Rank</span><span>Team</span>
+          <div style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '9mm', padding: '0 3mm', fontSize: '11pt', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.9 }}>
+            <span /><span>Rank</span><span>Team</span>
             <span style={{ ...num, display: 'flex', justifyContent: 'center' }}><Chicken w="5mm" light /></span>
             <span style={num}>Place pts</span><span style={num}>Elims</span><span style={num}>Total pts</span>
           </div>
@@ -408,7 +427,12 @@ function StandingsPage({ sp, th, t, teamById, players, lastSquad }) {
             const tm = teamById[x.team_id]
             const n = offset + i + 1
             return (
-              <div key={x.id} style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '17mm', padding: '0 4mm', borderTop: '0.3mm solid rgba(255,255,255,.18)', background: n === 1 ? `${th.line}33` : i % 2 ? 'rgba(0,0,0,.18)' : 'transparent', fontSize: '15pt' }}>
+              <div key={x.id} style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '17mm', padding: '0 3mm', borderTop: '0.3mm solid rgba(255,255,255,.18)', background: n === 1 ? `${th.line}33` : i % 2 ? 'rgba(0,0,0,.18)' : 'transparent', fontSize: '15pt' }}>
+                <span style={{ display: 'flex', alignItems: 'center' }}>
+                  {(delta?.[x.team_id] || 0) !== 0 && (
+                    <svg viewBox="0 0 10 8" style={{ width: '3.6mm', height: '3mm' }}><path d={delta[x.team_id] > 0 ? 'M5 0 L10 8 L0 8 Z' : 'M0 0 L10 0 L5 8 Z'} fill={delta[x.team_id] > 0 ? '#22c55e' : '#ef4444'} /></svg>
+                  )}
+                </span>
                 <span style={{ fontSize: '17pt' }}>#{n}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3mm', minWidth: 0 }}>
                   {tm?.logo_url ? <img src={tm.logo_url} alt="" style={{ height: '12mm', width: '12mm', objectFit: 'contain', flexShrink: 0 }} /> : <span style={{ width: '12mm', flexShrink: 0 }} />}
