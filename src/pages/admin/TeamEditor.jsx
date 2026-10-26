@@ -27,7 +27,7 @@ export default function TeamEditor({ team, onClose, onChanged }) {
     const name = np.name.trim()
     if (!name) return
     setErr('')
-    const { error } = await supabase.from('tournament_team_players').insert({ team_id: team.id, name, photo_url: np.photo || null, sort: P.length + 1 })
+    const { error } = await supabase.from('tournament_team_players').insert({ team_id: team.id, tournament_id: team.tournament_id, name, photo_url: np.photo || null, sort: P.length + 1 })
     if (error) return setErr(error.message)
     setNp({ name: '', photo: null }); players.reload()
   }
