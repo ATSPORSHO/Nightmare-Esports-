@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Trophy, Users, Medal, ArrowRight, LogIn, Settings, ShieldCheck, Flame } from 'lucide-react'
+import { Trophy, Users, Medal, ArrowRight, LogIn, Settings, ShieldCheck, Flame, Flag, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useSettings } from '../context/SettingsContext'
@@ -225,6 +225,24 @@ export default function Home() {
                       <Link to={`/tournament/${t.id}`} className="btn-ghost btn-sm ml-auto">Groups &amp; slots <ArrowRight size={13} /></Link>
                       {t.link_url && <a href={t.link_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm">Details <ArrowRight size={13} /></a>}
                     </div>
+                    {Array.isArray(t.roadmap) && t.roadmap.length > 0 && (
+                      <div className="mt-4 border-t border-red-900/50 pt-3">
+                        <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-red-400"><Flag size={12} /> Tournament roadmap</div>
+                        <ol className="flex overflow-x-auto pb-1">
+                          {t.roadmap.map((st, i, arr) => (
+                            <li key={i} className="min-w-[130px] flex-1 pr-3">
+                              <div className="flex items-center">
+                                <span className={`z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${i === 0 ? 'border-red-400 bg-red-600 text-white shadow-[0_0_14px_rgba(220,38,38,.7)]' : 'border-red-800 bg-ink-950 text-red-300'}`}>{i === arr.length - 1 ? <Trophy size={13} /> : i + 1}</span>
+                                {i < arr.length - 1 && <span className="h-px flex-1 bg-gradient-to-r from-red-600/80 to-red-900/30" />}
+                              </div>
+                              <div className="mt-2 text-[12px] font-bold uppercase leading-tight tracking-wide text-white">{st.title}</div>
+                              {st.date && <div className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-amber-300"><CalendarDays size={10} />{st.date}</div>}
+                              {st.note && <div className="mt-0.5 text-[10px] leading-snug text-slate-400">{st.note}</div>}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>

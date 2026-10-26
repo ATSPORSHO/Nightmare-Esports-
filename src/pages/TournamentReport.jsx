@@ -218,7 +218,6 @@ export default function TournamentReport() {
           const halves = [list.slice(0, nRows), list.slice(nRows)]
           const info = fmtDate(g.match_date)
           const timeTxt = g.match_time ? `${fmtTime(g.match_time)}${g.match_note ? ` (${g.match_note.toUpperCase()})` : ''}` : ''
-          const playedMax = Math.max(0, ...rows.map((x) => Number(x.mp) || 0))
           const nCols = list.length <= 9 ? 3 : list.length <= 16 ? 4 : 5
           const nCardRows = Math.max(1, Math.ceil(list.length / nCols))
           const cardH = Math.min(42, (140 - 3 * (nCardRows - 1)) / nCardRows)
@@ -318,10 +317,9 @@ export default function TournamentReport() {
                   </>)}
                 </div>
 
-                {results && (g.qualify > 0 || playedMax > 0) && (
+                {results && g.qualify > 0 && (
                   <div style={{ marginTop: '6mm', textAlign: 'center', textTransform: 'uppercase', lineHeight: 1.1, textShadow: '0 1px 3px rgba(0,0,0,.5)' }}>
-                    {playedMax > 0 && <div style={{ fontSize: '20pt', letterSpacing: '.12em' }}>Matches played : {playedMax}</div>}
-                    {g.qualify > 0 && <div style={{ marginTop: playedMax > 0 ? '1.5mm' : 0, fontSize: playedMax > 0 ? '15pt' : '20pt', letterSpacing: '.12em' }}>Top {g.qualify} teams qualify</div>}
+                    {g.qualify > 0 && <div style={{ fontSize: '20pt', letterSpacing: '.12em' }}>Top {g.qualify} teams qualify</div>}
                   </div>
                 )}
                 {!results && (timeTxt || extra.trim() || info || g.qualify > 0) && (

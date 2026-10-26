@@ -99,9 +99,11 @@ export default function TournamentResults({ tournament, onClose }) {
       a.place_pts += placementPoints(r.placement)
       a.kill_pts += Number(r.kills) || 0
     })
-    const group_rows = GT.filter((x) => x.group_id === groupId)
-    const ups = await Promise.all(group_rows.map((x) => {
-      const a = agg[x.team_id] || { mp: 0, wwcd: 0, place_pts: 0, kill_pts: 0 }
+    const fresh = await supabase.from('tournament_group_teams').select('*').eq('group_id', groupId)
+    if (fresh.error) throw fresh.error
+    const ups = await Promise.all((fresh.data || []).map((x) => {
+      const a = { ...(agg[x.team_id] || { mp: 0, wwcd: 0, place_pts: 0, kill_pts: 0 }) }
+      a.wwcd += Number(x.cd_extra) || 0   // chicken dinners added by hand
       return supabase.from('tournament_group_teams').update(a).eq('id', x.id)
     }))
     const bad = ups.find((u) => u.error)
@@ -155,6 +157,20 @@ export default function TournamentResults({ tournament, onClose }) {
       if (del.error) throw del.error
       await recompute(group.id)
       setMid(null); reloadAll()
+    } catch (e) { setErr(e.message || String(e)) }
+    setBusy(false)
+  }
+
+  /** add chicken dinners by hand for a team (on top of the ones counted from 1st placements) */
+  const setExtraCd = async (x, v) => {
+    const n = Math.max(0, Math.floor(Number(v) || 0))
+    if (n === (Number(x.cd_extra) || 0)) return
+    setBusy(true); setErr(''); setMsg('')
+    try {
+      const u = await supabase.from('tournament_group_teams').update({ cd_extra: n }).eq('id', x.id)
+      if (u.error) throw new Error(/cd_extra/.test(u.error.message) ? 'Run supabase/cd-extra.sql once in Supabase (SQL Editor), then try again.' : u.error.message)
+      await recompute(group.id)
+      reloadAll()
     } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
   }
@@ -286,7 +302,7 @@ export default function TournamentResults({ tournament, onClose }) {
                 <div className="overflow-x-auto rounded-lg border border-ink-700">
                   <table className="w-full text-sm">
                     <thead className="bg-ink-950 text-[11px] uppercase tracking-wider text-slate-400">
-                      <tr><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">Team</th><th className="px-2 py-2" title="Matches played">MP</th><th className="px-2 py-2" title="Winner Winner Chicken Dinner">WWCD</th><th className="px-2 py-2" title="Placement points">PP</th><th className="px-2 py-2" title="Kill points">KP</th><th className="px-2 py-2" title="Total points">TP</th></tr>
+                      <tr><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">Team</th><th className="px-2 py-2" title="Matches played">MP</th><th className="px-2 py-2" title="Winner Winner Chicken Dinner (from 1st places + the ones you add)">CD</th><th className="px-2 py-2" title="Add chicken dinners by hand">+ CD</th><th className="px-2 py-2" title="Placement points">PP</th><th className="px-2 py-2" title="Kill points">KP</th><th className="px-2 py-2" title="Total points">TP</th></tr>
                     </thead>
                     <tbody>
                       {board.map((x, i) => (
@@ -295,6 +311,7 @@ export default function TournamentResults({ tournament, onClose }) {
                           <td className="px-3 py-1.5">{teamById[x.team_id]?.name}{x.qualified && <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">QUALIFIED</span>}</td>
                           <td className="px-2 py-1.5 text-center">{x.mp || 0}</td>
                           <td className="px-2 py-1.5 text-center">{x.wwcd || 0}</td>
+                          <td className="px-2 py-1.5 text-center"><input key={`${x.id}-${x.cd_extra || 0}`} className="input !w-14 !px-1 !py-0.5 text-center" type="number" min="0" defaultValue={x.cd_extra || 0} disabled={busy} onBlur={(e) => setExtraCd(x, e.target.value)} /></td>
                           <td className="px-2 py-1.5 text-center">{x.place_pts || 0}</td>
                           <td className="px-2 py-1.5 text-center">{x.kill_pts || 0}</td>
                           <td className="px-2 py-1.5 text-center font-bold text-white">{two(totalOf(x))}</td>
