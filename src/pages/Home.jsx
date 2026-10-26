@@ -7,6 +7,7 @@ import { useSettings } from '../context/SettingsContext'
 import { useLineup } from '../context/LineupContext'
 import { num } from '../lib/format'
 import { Spinner } from '../components/ui'
+import SocialLinks from '../components/SocialLinks'
 
 const fmtDate = (d) =>
   new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
@@ -105,6 +106,7 @@ export default function Home() {
         className="dark-scope relative overflow-hidden rounded-2xl border border-red-900/60 px-6 py-10 shadow-[0_0_60px_-25px_rgba(200,16,46,.7)] sm:px-10 sm:py-14"
         style={{ backgroundImage: heroBg, backgroundSize: 'cover', backgroundPosition: 'center' }}
       >
+        <SocialLinks settings={settings} className="absolute bottom-5 right-6 z-10" />
         <div className="flex flex-wrap items-center gap-8">
           {settings.logo_url && <img src={settings.logo_url} alt="" className="h-28 w-28 shrink-0 object-contain drop-shadow-[0_0_22px_rgba(200,16,46,.7)] sm:h-36 sm:w-36" />}
           <div className="min-w-0 flex-1">
