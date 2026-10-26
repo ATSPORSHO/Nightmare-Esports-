@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -11,6 +11,11 @@ import { placementPoints } from '../lib/points'
 import bgGreen from '../assets/report/green.jpg'
 import bgBlue from '../assets/report/blue.jpg'
 import bgRed from '../assets/report/red.jpg'
+import mapRondo from '../assets/maps/rondo.jpg'
+import mapErangel from '../assets/maps/erangel.jpg'
+import mapMiramar from '../assets/maps/miramar.jpg'
+
+const MAPS = [{ key: 'rondo', name: 'Rondo', img: mapRondo }, { key: 'erangel', name: 'Erangel', img: mapErangel }, { key: 'miramar', name: 'Miramar', img: mapMiramar }]
 
 const fmtDate = (d) => (d ? d.split('-').reverse().join('/') : '')
 const fmtTime = (t) => {
@@ -57,11 +62,17 @@ export default function TournamentReport() {
     const mids = (mt.data || []).map((m) => m.id)
     const ps = mids.length ? await supabase.from('tmatch_player_stats').select('*').in('match_id', mids) : { data: [] }
     const mr = mids.length ? await supabase.from('tournament_match_results').select('match_id, team_id, placement, kills').in('match_id', mids) : { data: [] }
-    return { data: { t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [], matches: mt.data || [], pstats: ps.data || [], mres: mr.data || [] } }
+    const dr = await supabase.from('tdrop_spots').select('*').eq('tournament_id', id)
+    return { data: { drops: dr.data || [], t: t.data, rounds: r.data || [], groups: g.data || [], gts: gt.data || [], teams: tm.data || [], players: pl.data || [], matches: mt.data || [], pstats: ps.data || [], mres: mr.data || [] } }
   }, [id])
   const [themeKey, setThemeKey] = useState(() => { try { return localStorage.getItem('reportTheme2') || 'blue' } catch { return 'blue' } })
   const [rid, setRid] = useState('all')
   const [overall, setOverall] = useState(false)
+  const [mapKey, setMapKey] = useState('erangel')
+  const [dropGroup, setDropGroup] = useState('')
+  const [editDrops, setEditDrops] = useState(true)
+  const [placing, setPlacing] = useState('')
+  const [dragPos, setDragPos] = useState({}) // team id -> {x,y} while dragging
   const [h2hType, setH2hType] = useState('players') // head to head: 'players' | 'teams'
   const [h2hA, setH2hA] = useState('')
   const [h2hB, setH2hB] = useState('')
@@ -74,7 +85,7 @@ export default function TournamentReport() {
   if (loading || !data) return <div className="flex justify-center py-24"><Spinner /></div>
   if (!data.t) return <div className="py-24 text-center text-slate-400">Tournament not found.</div>
 
-  const { t, rounds, groups, gts, teams, players, matches, pstats, mres } = data
+  const { t, rounds, groups, gts, teams, players, matches, pstats, mres, drops: dropRows } = data
   const th = THEMES.find((x) => x.key === themeKey) || THEMES[1]
   const teamById = Object.fromEntries(teams.map((x) => [x.id, x]))
   const roundById = Object.fromEntries(rounds.map((r) => [r.id, r]))
@@ -85,6 +96,7 @@ export default function TournamentReport() {
   const standings = mode === 'standings'
   const mvp = mode === 'mvp'
   const h2h = mode === 'h2h'
+  const drops = mode === 'drops'
   const land = standings || mvp || h2h
   const cards = !results && style === 'cards'
   // pages of the A4 list/results report: one per group, or (results + overall) the whole round with 20 teams per page
@@ -194,8 +206,31 @@ export default function TournamentReport() {
       }
     }
   }
+  // ---- drop map: each team of the chosen group placed on the chosen map; teams on the same spot become "logo VS logo"
+  const dGroup = pages.find((g) => g.id === dropGroup) || pages[0]
+  const dTeams = dGroup ? gts.filter((x) => x.group_id === dGroup.id).sort((a, b) => (a.slot || 0) - (b.slot || 0)).map((x) => teamById[x.team_id]).filter(Boolean) : []
+  const dSpots = dGroup ? dropRows.filter((d) => d.group_id === dGroup.id && d.map === mapKey).map((d) => ({ ...d, x: Number(dragPos[d.team_id]?.x ?? d.x), y: Number(dragPos[d.team_id]?.y ?? d.y), tm: teamById[d.team_id] })).filter((d) => d.tm) : []
+  const dClusters = (() => {
+    const parent = dSpots.map((_, i) => i)
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])))
+    dSpots.forEach((a, i) => dSpots.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < 5.5) parent[find(j)] = find(i) }))
+    const m = {}
+    dSpots.forEach((d, i) => { (m[find(i)] ||= []).push(d) })
+    return Object.values(m).map((list) => ({ list, x: list.reduce((a, d) => a + d.x, 0) / list.length, y: list.reduce((a, d) => a + d.y, 0) / list.length }))
+  })()
+  const saveSpot = async (teamId, x, y) => {
+    setSaveErr('')
+    const { error } = await supabase.from('tdrop_spots').upsert({ tournament_id: id, group_id: dGroup.id, map: mapKey, team_id: teamId, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 }, { onConflict: 'group_id,map,team_id' })
+    setDragPos((d) => { const n = { ...d }; delete n[teamId]; return n })
+    if (error) return setSaveErr(/tdrop_spots/.test(error.message) ? 'Run supabase/drop-map.sql once in Supabase (SQL Editor), then try again.' : error.message)
+    await reload()
+  }
+  const removeSpot = async (teamId) => {
+    await supabase.from('tdrop_spots').delete().eq('group_id', dGroup.id).eq('map', mapKey).eq('team_id', teamId)
+    reload()
+  }
   const mvpSub = [rid === 'all' ? null : roundById[rid]?.name, 'MVP list', 'Most eliminations'].filter(Boolean).join('  ·  ')
-  const npages = h2h ? (h2hSides ? 1 : 0) : mvp ? mvpPages.length : standings ? standPages.length : sheetPages.length
+  const npages = drops ? 1 : h2h ? (h2hSides ? 1 : 0) : mvp ? mvpPages.length : standings ? standPages.length : sheetPages.length
   const titlePt = Math.min(48, Math.max(18, 760 / Math.max(title.length, 1)))
 
   return (
@@ -217,7 +252,7 @@ export default function TournamentReport() {
           <div>
             <span className="label">Print</span>
             <div className="flex overflow-hidden rounded-lg border border-ink-600">
-              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings'], ['mvp', 'MVP list'], ['h2h', 'Head to head']].map(([k, l]) => (
+              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings'], ['mvp', 'MVP list'], ['h2h', 'Head to head'], ['drops', 'Drop map']].map(([k, l]) => (
                 <button key={k} onClick={() => setMode(k)} className={`px-4 py-2 text-xs font-semibold ${mode === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
               ))}
             </div>
@@ -236,6 +271,28 @@ export default function TournamentReport() {
                 ))}
               </div>
             </div>
+          )}
+          {drops && (
+            <>
+              <div>
+                <span className="label">Map</span>
+                <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                  {MAPS.map((m) => <button key={m.key} onClick={() => setMapKey(m.key)} className={`px-4 py-2 text-xs font-semibold ${mapKey === m.key ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{m.name}</button>)}
+                </div>
+              </div>
+              <label>
+                <span className="label">Group</span>
+                <select className="input" value={dGroup?.id || ''} onChange={(e) => { setDropGroup(e.target.value); setPlacing('') }}>
+                  {pages.map((g) => <option key={g.id} value={g.id}>{roundById[g.round_id]?.name ? `${roundById[g.round_id].name} · ` : ''}{g.name}</option>)}
+                </select>
+              </label>
+              <div>
+                <span className="label">View</span>
+                <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                  {[[true, 'Edit drops'], [false, 'Preview (VS)']].map(([k, l]) => <button key={String(k)} onClick={() => { setEditDrops(k); setPlacing('') }} className={`px-4 py-2 text-xs font-semibold ${editDrops === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>)}
+                </div>
+              </div>
+            </>
           )}
           {h2h && (
             <>
@@ -287,11 +344,42 @@ export default function TournamentReport() {
           <ImageField label="Tournament logo (top right corner)" folder="tournament" value={t.logo_url} onChange={saveLogo} hint="PNG with a transparent background looks best." />
           <ImageField label="Sponsor image (placed above “Sponsored by”)" folder="sponsor" value={t.sponsor_url} onChange={saveSponsor} hint="PNG with a transparent background looks best." />
         </div>
+        {drops && editDrops && dGroup && (
+          <div className="rounded-xl border border-ink-600 bg-ink-850 p-3">
+            <div className="mb-2 text-xs text-slate-400">1) Click a team  2) click its drop spot on the map  3) drag a logo to move it. Teams that drop on the same spot are shown together as “logo VS logo” in Preview and in print.</div>
+            <div className="flex flex-wrap gap-1.5">
+              {dTeams.map((tm) => {
+                const placed = dSpots.some((d) => d.team_id === tm.id)
+                return (
+                  <span key={tm.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2 text-xs ${placing === tm.id ? 'border-accent bg-accent/20 text-white' : placed ? 'border-emerald-500/50 text-emerald-300' : 'border-ink-600 text-slate-300'}`}>
+                    <button type="button" className="flex items-center gap-1.5" onClick={() => setPlacing(placing === tm.id ? '' : tm.id)} title={placed ? 'Click, then click the map to move it' : 'Click, then click the map to place it'}>
+                      {tm.logo_url ? <img src={tm.logo_url} alt="" className="h-5 w-5 rounded-full bg-white object-contain" /> : <span className="h-5 w-5 rounded-full bg-ink-700" />}
+                      {tm.tag || tm.name}{placed ? ' ✓' : ''}
+                    </button>
+                    {placed && <button type="button" className="text-red-400" title="Remove from the map" onClick={() => removeSpot(tm.id)}>×</button>}
+                  </span>
+                )
+              })}
+              {!dTeams.length && <span className="text-xs text-slate-500">No teams in this group.</span>}
+            </div>
+            {placing && <div className="mt-2 text-xs font-semibold text-amber-300">Now click the map to place {teamById[placing]?.name}.</div>}
+          </div>
+        )}
         <ErrorBox>{saveErr}</ErrorBox>
         <p className="text-xs text-slate-500">Fixture = slot list before the match, Results = leaderboard after it (teams that qualified are filled in). One group per A4 page. In the print window choose A4, Portrait, margins None, and tick “Background graphics”.</p>
       </div>
 
       {/* ---------- A4 pages ---------- */}
+      {drops && (
+        <div className="a4-area overflow-x-auto">
+          {!dGroup ? <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div> : (
+            <DropMapPage map={MAPS.find((m) => m.key === mapKey)} group={dGroup} th={th} t={t} spots={dSpots} clusters={dClusters} edit={editDrops} placing={placing} title={title} titlePt={titlePt}
+              onPlace={(x, y) => { if (placing) { saveSpot(placing, x, y); setPlacing('') } }}
+              onMove={(teamId, x, y) => setDragPos((d) => ({ ...d, [teamId]: { x, y } }))}
+              onSave={saveSpot} onRemove={removeSpot} />
+          )}
+        </div>
+      )}
       {h2h && (
         <div className="a4l-area overflow-x-auto">
           {!h2hSides && <div className="card py-10 text-center text-sm text-slate-400">Choose two different {h2hType} above to build the head-to-head page.</div>}
@@ -314,7 +402,7 @@ export default function TournamentReport() {
           ))}
         </div>
       )}
-      <div className={`a4-area overflow-x-auto ${land ? 'hidden' : ''}`}>
+      <div className={`a4-area overflow-x-auto ${land || drops ? 'hidden' : ''}`}>
         {!sheetPages.length && <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div>}
         {sheetPages.map((sp0) => {
           const g = sp0.g
@@ -646,6 +734,56 @@ function H2HPage({ sides, sub, th, t }) {
         })}
       </div>
       {t.sponsor_url && <div style={{ position: 'absolute', right: '10mm', bottom: '6mm', display: 'flex', alignItems: 'center', gap: '3mm', fontSize: '9pt', letterSpacing: '.15em', textTransform: 'uppercase', opacity: 0.9 }}>Sponsored by <img src={t.sponsor_url} alt="" style={{ height: '11mm', maxWidth: '35mm', objectFit: 'contain' }} /></div>}
+    </section>
+  )
+}
+
+/** Drop map: team logos (circles) on the map. Edit = drag the circles, preview/print = teams on the same spot become "logo VS logo". A4 portrait. */
+function DropMapPage({ map, group, th, t, spots, clusters, edit, placing, title, titlePt, onPlace, onMove, onSave, onRemove }) {
+  const ref = useRef(null)
+  const D = 8 // logo circle, mm
+  const pct = (e) => {
+    const r = ref.current.getBoundingClientRect()
+    return { x: Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)), y: Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)) }
+  }
+  const startDrag = (e, teamId) => {
+    e.preventDefault(); e.stopPropagation()
+    let last = null
+    const move = (ev) => { last = pct(ev); onMove(teamId, last.x, last.y) }
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); if (last) onSave(teamId, last.x, last.y) }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+  }
+  const circle = (tm) => (
+    <div style={{ width: `${D}mm`, height: `${D}mm`, borderRadius: '50%', background: '#fff', border: `0.5mm solid ${th.line}`, boxShadow: '0 0.8mm 1.6mm rgba(0,0,0,.55)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {tm.logo_url ? <img src={tm.logo_url} alt="" draggable={false} style={{ width: '86%', height: '86%', objectFit: 'contain' }} /> : <span style={{ color: '#111', fontSize: '8pt' }}>{String(tm.tag || tm.name).slice(0, 3)}</span>}
+    </div>
+  )
+  const tag = (tm) => <div style={{ marginTop: '0.6mm', fontSize: '5.5pt', letterSpacing: '.04em', textTransform: 'uppercase', textAlign: 'center', whiteSpace: 'nowrap', textShadow: '0 0 2px #000, 0 0 3px #000', color: '#fff' }}>{tm.tag || tm.name}</div>
+  return (
+    <section className="a4-page relative mx-auto mb-6 overflow-hidden shadow-xl" style={{ width: '210mm', height: '297mm', backgroundImage: `url(${th.bg})`, backgroundSize: '100% 100%', color: '#fff', fontFamily: FONT, fontWeight: 400 }}>
+      {t.logo_url && <img src={t.logo_url} alt="" style={{ position: 'absolute', right: '3.5%', top: '1.6%', width: '14%', height: '9.6%', objectFit: 'contain', objectPosition: 'right top' }} />}
+      <div style={{ position: 'absolute', left: '14%', right: '14%', top: '12.4%', height: '6.6%', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', whiteSpace: 'nowrap', fontSize: `${titlePt}pt`, lineHeight: 1, letterSpacing: '.02em', textShadow: '0 1px 4px rgba(0,0,0,.35)' }}>{title}</div>
+      <div style={{ position: 'absolute', left: '22%', width: '56%', top: '19%', textAlign: 'center', height: '4.3%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22pt', letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,.45)' }}>{group.name} · {map.name} drops</div>
+
+      <div style={{ position: 'absolute', left: '17mm', top: '78mm', width: '176mm', height: '176mm', boxShadow: '0 2px 10px rgba(0,0,0,.45)', border: `0.7mm solid ${th.line}`, background: '#000' }}>
+        <div ref={ref} onClick={(e) => { if (edit && placing) { const p = pct(e); onPlace(p.x, p.y) } }} style={{ position: 'relative', width: '100%', height: '100%', backgroundImage: `url(${map.img})`, backgroundSize: '100% 100%', cursor: edit && placing ? 'crosshair' : 'default', overflow: 'hidden' }}>
+          {edit && spots.map((d) => (
+            <div key={d.team_id} onPointerDown={(e) => startDrag(e, d.team_id)} style={{ position: 'absolute', left: `${d.x}%`, top: `${d.y}%`, transform: 'translate(-50%, -50%)', cursor: 'grab', touchAction: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {circle(d.tm)}{tag(d.tm)}
+            </div>
+          ))}
+          {!edit && clusters.map((c, i) => (
+            <div key={i} style={{ position: 'absolute', left: `${c.x}%`, top: `${c.y}%`, transform: 'translate(-50%, -50%)', display: 'flex', alignItems: 'flex-start', gap: '1mm', ...(c.list.length > 1 ? { padding: '0.8mm 1.4mm 0.3mm', borderRadius: '6mm', background: 'rgba(0,0,0,.62)', border: `0.5mm solid ${th.line}` } : {}) }}>
+              {c.list.map((d, k) => (
+                <div key={d.team_id} style={{ display: 'flex', alignItems: 'flex-start', gap: '1mm' }}>
+                  {k > 0 && <span style={{ marginTop: `${D / 2 - 2.4}mm`, fontSize: '9pt', lineHeight: 1, color: th.line, filter: 'brightness(1.7)', textShadow: '0 0 3px #000' }}>VS</span>}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>{circle(d.tm)}{tag(d.tm)}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   )
 }
