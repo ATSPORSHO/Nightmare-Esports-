@@ -4,6 +4,9 @@ import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { ErrorBox, Field, Modal, Notice, Spinner } from '../../components/ui'
 import { rank, totalOf } from '../../lib/tournament'
+import LogoPick from '../../components/LogoPick'
+import TeamEditor from './TeamEditor'
+import Flag from '../../components/Flag'
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const MIN_SLOT = 2
@@ -29,26 +32,36 @@ export default function TournamentGroups({ tournament, onClose }) {
   const teams = useData(() => supabase.from('tournament_teams').select('*').eq('tournament_id', tid).order('name'), [tid])
   const rounds = useData(() => supabase.from('tournament_rounds').select('*').eq('tournament_id', tid).order('sort'), [tid])
   const groups = useData(() => supabase.from('tournament_groups').select('*').eq('tournament_id', tid).order('sort'), [tid])
+  const plys = useData(() => supabase.from('tournament_team_players').select('*').order('sort'), [tid])
   const gts = useData(() => supabase.from('tournament_group_teams').select('*').eq('tournament_id', tid), [tid])
   const [names, setNames] = useState('')
+  const [one, setOne] = useState({ name: '', tag: '', logo: null, invited: false })
+  const [invitePick, setInvitePick] = useState([])
+  const [editTeam, setEditTeam] = useState(null)
   const [draw, setDraw] = useState({ round: '', groups: 2, qualify: 8, slot_start: 2 })
   const [rid, setRid] = useState(null)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   const T = teams.data || []
   const R = rounds.data || []
   const G = groups.data || []
   const GT = gts.data || []
+  const PL = plys.data || []
   const teamById = Object.fromEntries(T.map((t) => [t.id, t]))
-  const reload = () => { teams.reload(); rounds.reload(); groups.reload(); gts.reload() }
+  const reload = () => { teams.reload(); plys.reload(); rounds.reload(); groups.reload(); gts.reload() }
   const fail = (e) => { setErr(e?.message || String(e)); setBusy(false) }
 
   const active = R.find((r) => r.id === rid) || R[R.length - 1] || null
   const lastRound = R[R.length - 1] || null
   const groupsOf = (r) => G.filter((g) => g.round_id === r?.id)
   const entriesOf = (g) => GT.filter((x) => x.group_id === g.id).sort((a, b) => (a.slot || 0) - (b.slot || 0))
+  const placed = new Set(GT.map((x) => x.team_id))
+  // teams of the newest round (+ teams not drawn yet), so the list stays short once a new round starts
+  const inLast = new Set(lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).map((x) => x.team_id) : [])
+  const shownTeams = !lastRound || showAll ? T : T.filter((t) => inLast.has(t.id) || !placed.has(t.id))
   const qualifiedOfLast = lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).filter((x) => x.qualified).map((x) => teamById[x.team_id]).filter(Boolean) : []
 
   const addTeams = async () => {
@@ -59,6 +72,20 @@ export default function TournamentGroups({ tournament, onClose }) {
     setBusy(false)
     if (error) return setErr(error.message)
     setNames(''); reload()
+  }
+  const addOne = async () => {
+    const name = one.name.trim()
+    if (!name) return
+    setBusy(true); setErr(''); setMsg('')
+    const { error } = await supabase.from('tournament_teams').insert({ tournament_id: tid, name, tag: one.tag.trim() || null, logo_url: one.logo || null, invited: one.invited })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setOne({ name: '', tag: '', logo: null, invited: false }); reload()
+  }
+  const setLogo = async (t, url) => {
+    const { error } = await supabase.from('tournament_teams').update({ logo_url: url }).eq('id', t.id)
+    if (error) return setErr(error.message)
+    reload()
   }
   const removeTeam = async (t) => {
     if (!window.confirm(`Remove ${t.name} from the tournament (all rounds)?`)) return
@@ -73,9 +100,12 @@ export default function TournamentGroups({ tournament, onClose }) {
   /** create a new round: first round draws all teams, later rounds draw only the teams ticked "qualified" in the previous round */
   const runDraw = async () => {
     setErr(''); setMsg('')
-    const pool = lastRound ? qualifiedOfLast : T
+    const core = lastRound ? qualifiedOfLast : T.filter((t) => !t.invited)
+    const coreIds = new Set(core.map((t) => t.id))
+    const pool = [...core, ...T.filter((t) => invitePick.includes(t.id) && !coreIds.has(t.id))]
     const n = pool.length
     if (!T.length) return setErr('Add some teams first.')
+    if (!n) return setErr(lastRound ? 'No teams for this round yet: tick the qualified teams or the invited teams.' : 'No teams to draw (invited teams join later rounds).')
     if (lastRound && !n) return setErr(`Tick the qualified teams in “${lastRound.name}” first (section 3), then create the next round.`)
     const g = Math.max(1, Math.min(Number(draw.groups) || 1, n))
     const start = Number(draw.slot_start)
@@ -108,7 +138,7 @@ export default function TournamentGroups({ tournament, onClose }) {
     setBusy(false)
     if (up.error) return setErr(up.error.message)
     setRid(rr.data.id)
-    setDraw({ ...draw, round: '' })
+    setDraw({ ...draw, round: '' }); setInvitePick([])
     setMsg(`${roundName}: ${n} teams drawn into ${g} groups.`)
     reload()
   }
@@ -130,21 +160,52 @@ export default function TournamentGroups({ tournament, onClose }) {
 
   return (
     <Modal title={`Teams, rounds & groups — ${tournament.title}`} onClose={onClose} wide>
+      {editTeam && <TeamEditor international={tournament.scope === 'international'} team={editTeam} onClose={() => setEditTeam(null)} onChanged={reload} />}
       <div className="space-y-5">
         {/* 1. teams */}
         <section>
-          <div className="label">1. Add the participating teams (one name per line)</div>
+          <div className="label">1. Add the participating teams</div>
+          <div className="flex items-center gap-2">
+            <LogoPick size={40} value={one.logo} onChange={(u) => setOne({ ...one, logo: u })} title="Team logo (optional)" />
+            <input className="input" placeholder="Team name" value={one.name} onChange={(e) => setOne({ ...one, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOne() } }} />
+            <input className="input !w-24 shrink-0" placeholder="Tag" maxLength={8} value={one.tag} onChange={(e) => setOne({ ...one, tag: e.target.value.toUpperCase() })} />
+            <button type="button" className="btn-primary btn-sm shrink-0" disabled={busy || !one.name.trim()} onClick={addOne}><Plus size={14} /> Add team</button>
+          </div>
+          <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" checked={one.invited} onChange={(e) => setOne({ ...one, invited: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+            Invited team — skips the first draw and joins the round you choose in step 2
+          </label>
+          <div className="mt-1 text-[11px] text-slate-500">After adding, click a team name below to add its tag, logo and players with photos.</div>
+          <div className="mb-1 mt-3 text-xs text-slate-500">Or paste many names at once (one per line) and add the logos afterwards by clicking the small square next to each team:</div>
           <textarea className="input min-h-[90px]" value={names} onChange={(e) => setNames(e.target.value)} placeholder={'INF ESPORTS\nNM ESPORTS\nT6 ESPORTS'} />
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-slate-500">{T.length} teams added</span>
             <button type="button" className="btn-primary btn-sm" disabled={busy || !names.trim()} onClick={addTeams}><Plus size={14} /> Add teams</button>
           </div>
+          {lastRound && T.length > 0 && (
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+              <span>{showAll ? `All ${T.length} teams` : `Showing ${shownTeams.length} teams of “${lastRound.name}” (and teams not drawn yet)`}</span>
+              <button type="button" className="underline hover:text-white" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show current round only' : 'Show all teams'}</button>
+            </div>
+          )}
           {teams.loading ? <Spinner /> : T.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {T.map((t) => (
-                <span key={t.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-1.5 text-xs ${t.is_ours ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-300'}`}>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {shownTeams.map((t) => (
+                <span key={t.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-1.5 text-xs ${t.is_ours ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-300'}`}>
+                  <LogoPick size={24} value={t.logo_url} onChange={(u) => setLogo(t, u)} />
                   <button type="button" title="Mark as our team (highlighted)" onClick={() => toggleOurs(t)}>{t.is_ours ? '★' : '☆'}</button>
-                  {t.name}
+                  <button type="button" title="Edit team: tag, logo, players" onClick={() => setEditTeam(t)} className="hover:text-white">{t.name}{t.tag ? ` [${t.tag}]` : ''}</button>
+                  {t.invited && <span className="rounded bg-amber-500/20 px-1.5 text-[9px] font-bold text-amber-300">INVITED</span>}
+                  {PL.filter((p) => p.team_id === t.id).length > 0 && (
+                    <span className="flex items-center -space-x-1.5" title={PL.filter((p) => p.team_id === t.id).map((p) => p.name).join(', ')}>
+                      {PL.filter((p) => p.team_id === t.id).slice(0, 6).map((p) => (
+                        p.photo_url
+                          ? <img key={p.id} src={p.photo_url} alt={p.name} className="h-5 w-5 rounded-full border border-ink-900 object-cover" />
+                          : <span key={p.id} className="flex h-5 w-5 items-center justify-center rounded-full border border-ink-900 bg-ink-700 text-[9px] font-bold text-slate-300">{p.name.slice(0, 1)}</span>
+                      ))}
+                      <span className="pl-2.5 text-[10px] text-slate-400">{PL.filter((p) => p.team_id === t.id).length}</span>
+                    </span>
+                  )}
                   <button type="button" onClick={() => removeTeam(t)} className="text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
                 </span>
               ))}
@@ -155,7 +216,7 @@ export default function TournamentGroups({ tournament, onClose }) {
         {/* 2. new round */}
         <section>
           <div className="label">
-            2. {lastRound ? `Create the next round (draws the ${qualifiedOfLast.length} teams qualified from “${lastRound.name}”)` : 'Draw the first round (all teams)'}
+            2. {lastRound ? `Create the next round (draws the ${qualifiedOfLast.length} teams qualified from “${lastRound.name}”${invitePick.length ? ` + ${invitePick.length} invited` : ''})` : `Draw the first round (${T.filter((t) => !t.invited).length} teams${invitePick.length ? ` + ${invitePick.length} invited` : ''})`}
           </div>
           <div className="grid gap-3 sm:grid-cols-5">
             <Field label="Round name"><input className="input" value={draw.round} onChange={(e) => setDraw({ ...draw, round: e.target.value })} placeholder={`Round ${R.length + 1}`} /></Field>
@@ -164,6 +225,19 @@ export default function TournamentGroups({ tournament, onClose }) {
             <Field label={`Slot list starts at (${MIN_SLOT}–${MAX_SLOT})`}><input className="input" type="number" min={MIN_SLOT} max={MAX_SLOT} value={draw.slot_start} onChange={(e) => setDraw({ ...draw, slot_start: e.target.value })} /></Field>
             <div className="flex items-end"><button type="button" className="btn-primary w-full" disabled={busy || !T.length} onClick={runDraw}><Shuffle size={15} /> {lastRound ? 'Create round' : 'Draw groups'}</button></div>
           </div>
+          {T.some((t) => t.invited && !placed.has(t.id)) && (
+            <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5">
+              <div className="mb-1.5 text-xs font-semibold text-amber-300">Invited teams — tick the ones that join directly in this round</div>
+              <div className="flex flex-wrap gap-1.5">
+                {T.filter((t) => t.invited && !placed.has(t.id)).map((t) => (
+                  <label key={t.id} className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${invitePick.includes(t.id) ? 'border-amber-400 bg-amber-500/15 text-white' : 'border-ink-600 text-slate-300'}`}>
+                    <input type="checkbox" className="h-3.5 w-3.5 accent-[rgb(var(--accent))]" checked={invitePick.includes(t.id)} onChange={(e) => setInvitePick(e.target.checked ? [...invitePick, t.id] : invitePick.filter((x) => x !== t.id))} />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="mt-1 text-[11px] text-slate-500">Slots count up from the start slot, e.g. 18 teams starting at 3 use slots 3–20. Past rounds stay saved and visible to visitors.</p>
         </section>
 
@@ -191,7 +265,7 @@ export default function TournamentGroups({ tournament, onClose }) {
               </div>
               <div className="space-y-4">
                 {groupsOf(active).map((g) => (
-                  <GroupEditor key={g.id + (g.slot_start ?? '')} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
+                  <GroupEditor key={g.id + (g.slot_start ?? '') + entriesOf(g).map((x) => x.slot).join('')} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
                 ))}
               </div>
             </>
@@ -266,6 +340,22 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     onChanged()
   }
 
+  /** pick another slot for a team: the team that had that slot gets this team's old slot (swap) */
+  const setSlot = async (x, newSlot) => {
+    const target = Number(newSlot)
+    const mine = x.slot ?? null
+    if (!Number.isInteger(target) || target === mine) return
+    setErr('')
+    const other = entries.find((y) => y.id !== x.id && y.slot === target)
+    const a = await supabase.from('tournament_group_teams').update({ slot: target }).eq('id', x.id)
+    if (a.error) return setErr(a.error.message)
+    if (other) {
+      const b = await supabase.from('tournament_group_teams').update({ slot: mine }).eq('id', other.id)
+      if (b.error) return setErr(b.error.message)
+    }
+    onChanged()
+  }
+
   const move = async (x, toGroupId) => {
     if (!toGroupId || toGroupId === g.id) return
     const target = groups.find((y) => y.id === toGroupId)
@@ -299,8 +389,10 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
           const t = teamById[x.team_id]
           return (
             <div key={x.id} className="flex items-center gap-3 px-3 py-1.5 text-sm">
-              <span className="w-8 font-semibold text-red-400">{Number(f.slot_start) + i}</span>
-              <span className={`min-w-0 flex-1 truncate ${t?.is_ours ? 'font-semibold text-white' : ''}`}>{t?.name || '—'}</span>
+              <select className="input !w-16 !px-1 !py-0.5 text-center text-xs font-semibold text-red-400" value={x.slot ?? Number(f.slot_start) + i} onChange={(e) => setSlot(x, e.target.value)} title="Change the slot: the team on that slot swaps places with this one">
+                {entries.map((_, k) => <option key={k} value={Number(f.slot_start) + k}>{Number(f.slot_start) + k}</option>)}
+              </select>
+              <span className={`flex min-w-0 flex-1 items-center gap-1.5 truncate ${t?.is_ours ? 'font-semibold text-white' : ''}`}><Flag code={t?.country} h="3.5mm" />{t?.name || '—'}</span>
               <input className="input !w-14 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'wwcd')} onChange={(e) => setVal(x, 'wwcd', e.target.value)} />
               <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'place_pts')} onChange={(e) => setVal(x, 'place_pts', e.target.value)} />
               <input className="input !w-16 !px-1 !py-0.5 text-center text-xs" type="number" min="0" value={val(x, 'kill_pts')} onChange={(e) => setVal(x, 'kill_pts', e.target.value)} />

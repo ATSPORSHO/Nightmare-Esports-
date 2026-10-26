@@ -110,6 +110,21 @@ body {
   .tbl td, .tbl th { color: #000 !important; }
 }
 
+/* A4 slot-list report: portrait, one group per page */
+@page a4portrait { size: A4 portrait; margin: 0; }
+.a4-area { page: a4portrait; }
+.a4-page { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media print {
+  .a4-area { overflow: visible !important; }
+  .a4-page { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; }
+  .a4-page:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* Current-standings report: landscape A4, 8 teams per page */
+@page a4landscape { size: A4 landscape; margin: 0; }
+.a4l-area { page: a4landscape; }
+@media print { .a4l-area { overflow: visible !important; } }
+
 /* One-page team report keeps its blood-red / black look on paper */
 .report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {

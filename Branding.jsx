@@ -91,6 +91,16 @@ export default function Branding() {
         <div className="mt-4"><Field label="About the organization"><textarea className="input min-h-[90px]" value={f.org_about ?? ''} onChange={set('org_about')} /></Field></div>
       </Card>
 
+      <Card title="Social media (shown on the home page, everyone can click them)">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Facebook link"><input className="input" placeholder="https://facebook.com/yourpage" value={f.social_facebook ?? ''} onChange={set('social_facebook')} /></Field>
+          <Field label="Instagram link"><input className="input" placeholder="https://instagram.com/yourhandle" value={f.social_instagram ?? ''} onChange={set('social_instagram')} /></Field>
+          <Field label="YouTube link"><input className="input" placeholder="https://youtube.com/@yourchannel" value={f.social_youtube ?? ''} onChange={set('social_youtube')} /></Field>
+          <Field label="Discord invite link"><input className="input" placeholder="https://discord.gg/yourinvite" value={f.social_discord ?? ''} onChange={set('social_discord')} /></Field>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Leave a box empty to hide that icon. Run supabase/social-links.sql once before saving.</p>
+      </Card>
+
       <Card title="Regional & links">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Currency code"><input className="input" value={f.currency} onChange={set('currency')} /></Field>
