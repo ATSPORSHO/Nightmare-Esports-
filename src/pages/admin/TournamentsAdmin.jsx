@@ -92,7 +92,7 @@ function Form({ row, onClose, onSaved }) {
     const rm = await supabase.from('tournaments').update({ roadmap }).eq('id', res.data.id).select('roadmap').single()
     setBusy(false)
     if (rm.error) return setErr(/roadmap/.test(rm.error.message) ? 'The tournament was saved, but the roadmap column is missing in the database. Run supabase/roadmap.sql once in Supabase (SQL Editor), then press Save again.' : rm.error.message)
-    if (roadmap.length && (rm.data?.roadmap || []).length !== roadmap.length) return setErr('The roadmap could not be stored (database blocked it). Send me this message.')
+    if (roadmap.length && !Array.isArray(rm.data?.roadmap)) return setErr('The roadmap column has the wrong type in the database. Run supabase/roadmap.sql once in Supabase (SQL Editor), then press Save again.')
     onSaved()
   }
 
