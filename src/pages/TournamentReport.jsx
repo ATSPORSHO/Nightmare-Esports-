@@ -62,6 +62,10 @@ export default function TournamentReport() {
   const [themeKey, setThemeKey] = useState(() => { try { return localStorage.getItem('reportTheme2') || 'blue' } catch { return 'blue' } })
   const [rid, setRid] = useState('all')
   const [overall, setOverall] = useState(false)
+  const [h2hType, setH2hType] = useState('players') // head to head: 'players' | 'teams'
+  const [h2hA, setH2hA] = useState('')
+  const [h2hB, setH2hB] = useState('')
+  const [view, setView] = useState('group') // results report: 'group' = one page per group, 'overall' = whole round together, 20 teams per page
   const [mode, setMode] = useState('fixture') // 'fixture' = slot list, 'results' = leaderboard
   const [style, setStyle] = useState(() => { try { return localStorage.getItem('reportStyle') || 'list' } catch { return 'list' } }) // 'list' | 'cards'
   const [saveErr, setSaveErr] = useState('')
@@ -80,8 +84,17 @@ export default function TournamentReport() {
   const results = mode === 'results'
   const standings = mode === 'standings'
   const mvp = mode === 'mvp'
-  const land = standings || mvp
+  const h2h = mode === 'h2h'
+  const land = standings || mvp || h2h
   const cards = !results && style === 'cards'
+  // pages of the A4 list/results report: one per group, or (results + overall) the whole round with 20 teams per page
+  const sheetPages = (results && view === 'overall')
+    ? rounds.filter((r) => rid === 'all' || r.id === rid).flatMap((r) => {
+      const all = rank(gts.filter((x) => groups.some((g) => g.round_id === r.id && g.id === x.group_id)))
+      const n = Math.max(1, Math.ceil(all.length / 20))
+      return Array.from({ length: n }, (_, c) => ({ key: `${r.id}-ov-${c}`, g: { id: `${r.id}-ov-${c}`, name: `${r.name} · Overall${n > 1 ? ` (${c + 1}/${n})` : ''}`, round_id: r.id, qualify: Number(r.qualify_overall) || 0 }, rows: all.slice(c * 20, c * 20 + 20), offset: c * 20 }))
+    })
+    : pages.map((g) => ({ key: g.id, g, rows: gts.filter((x) => x.group_id === g.id), offset: 0 }))
 
   const pickTheme = (k) => { setThemeKey(k); try { localStorage.setItem('reportTheme2', k) } catch { /* ignore */ } }
   const saveField = async (col, url) => {
@@ -144,8 +157,45 @@ export default function TournamentReport() {
     .sort((a, b) => b.k - a.k || a.m - b.m || a.p.name.localeCompare(b.p.name))
   const mvpPages = []
   for (let i = 0; i < Math.min(10, mvpList.length); i += 5) mvpPages.push(mvpList.slice(i, i + 5))
+  // ---- head to head (teams or players of your choice, over the matches of the chosen round(s))
+  const inScope = (matchId) => groupIds.has(matchById[matchId]?.group_id)
+  const teamStat = (tid) => {
+    const rs = mres.filter((r) => r.team_id === tid && r.placement != null && inScope(r.match_id))
+    const pp = rs.reduce((a, r) => a + placementPoints(r.placement), 0)
+    const kp = rs.reduce((a, r) => a + (Number(r.kills) || 0), 0)
+    const cdExtra = gts.filter((x) => x.team_id === tid && groupIds.has(x.group_id)).reduce((a, x) => a + (Number(x.cd_extra) || 0), 0)
+    return { mp: rs.length, pp, kp, tp: pp + kp, cd: rs.filter((r) => r.placement === 1).length + cdExtra, best: rs.length ? Math.min(...rs.map((r) => r.placement)) : null, avg: rs.length ? rs.reduce((a, r) => a + r.placement, 0) / rs.length : null, rs }
+  }
+  const playerStat = (pid) => {
+    const rows = pstats.filter((x) => x.player_id === pid && inScope(x.match_id))
+    const k = rows.reduce((a, x) => a + (Number(x.kills) || 0), 0)
+    const teamK = rows.reduce((a, x) => a + (Number(mres.find((r) => r.match_id === x.match_id && r.team_id === x.team_id)?.kills) || 0), 0)
+    return { m: rows.length, k, best: rows.length ? Math.max(...rows.map((x) => Number(x.kills) || 0)) : 0, avg: rows.length ? k / rows.length : 0, contr: teamK > 0 ? Math.round((k / teamK) * 100) : 0 }
+  }
+  let h2hSides = null
+  if (h2h && h2hA && h2hB && h2hA !== h2hB) {
+    if (h2hType === 'teams') {
+      const A = teamStat(h2hA), B = teamStat(h2hB)
+      let aheadA = 0, aheadB = 0
+      A.rs.forEach((ra) => { const rb = B.rs.find((r) => r.match_id === ra.match_id); if (rb) { if (ra.placement < rb.placement) aheadA += 1; else if (rb.placement < ra.placement) aheadB += 1 } })
+      h2hSides = {
+        a: { kind: 'team', team: teamById[h2hA] }, b: { kind: 'team', team: teamById[h2hB] },
+        rows: [
+          ['Total pts', A.tp, B.tp], ['Place pts', A.pp, B.pp], ['Elims', A.kp, B.kp], ['Chicken dinners', A.cd, B.cd],
+          ['Matches', A.mp, B.mp, true], ['Placed ahead', aheadA, aheadB],
+        ],
+      }
+    } else {
+      const A = playerStat(h2hA), B = playerStat(h2hB)
+      const pa = players.find((x) => x.id === h2hA), pb = players.find((x) => x.id === h2hB)
+      h2hSides = {
+        a: { kind: 'player', player: pa, team: teamById[pa?.team_id] }, b: { kind: 'player', player: pb, team: teamById[pb?.team_id] },
+        rows: [['Elims', A.k, B.k], ['Matches', A.m, B.m, true], ['Avg elims', A.avg.toFixed(1), B.avg.toFixed(1), false, A.avg - B.avg], ['Best match', A.best, B.best], ['Elim. contr.', `${A.contr}%`, `${B.contr}%`, false, A.contr - B.contr]],
+      }
+    }
+  }
   const mvpSub = [rid === 'all' ? null : roundById[rid]?.name, 'MVP list', 'Most eliminations'].filter(Boolean).join('  ·  ')
-  const npages = mvp ? mvpPages.length : standings ? standPages.length : pages.length
+  const npages = h2h ? (h2hSides ? 1 : 0) : mvp ? mvpPages.length : standings ? standPages.length : sheetPages.length
   const titlePt = Math.min(48, Math.max(18, 760 / Math.max(title.length, 1)))
 
   return (
@@ -167,7 +217,7 @@ export default function TournamentReport() {
           <div>
             <span className="label">Print</span>
             <div className="flex overflow-hidden rounded-lg border border-ink-600">
-              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings'], ['mvp', 'MVP list']].map(([k, l]) => (
+              {[['fixture', 'Fixture (slot list)'], ['results', 'Results'], ['standings', 'Current standings'], ['mvp', 'MVP list'], ['h2h', 'Head to head']].map(([k, l]) => (
                 <button key={k} onClick={() => setMode(k)} className={`px-4 py-2 text-xs font-semibold ${mode === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
               ))}
             </div>
@@ -183,6 +233,39 @@ export default function TournamentReport() {
               <div className="flex overflow-hidden rounded-lg border border-ink-600">
                 {[['list', 'List'], ['cards', 'Logo cards']].map(([k, l]) => (
                   <button key={k} onClick={() => { setStyle(k); try { localStorage.setItem('reportStyle', k) } catch { /* ignore */ } }} className={`px-4 py-2 text-xs font-semibold ${style === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {h2h && (
+            <>
+              <div>
+                <span className="label">Compare</span>
+                <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                  {[['players', 'Players'], ['teams', 'Teams']].map(([k, l]) => (
+                    <button key={k} onClick={() => { setH2hType(k); setH2hA(''); setH2hB('') }} className={`px-4 py-2 text-xs font-semibold ${h2hType === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {[['Left side', h2hA, setH2hA], ['Right side', h2hB, setH2hB]].map(([lab, val, set]) => (
+                <label key={lab}>
+                  <span className="label">{lab}</span>
+                  <select className="input" value={val} onChange={(e) => set(e.target.value)}>
+                    <option value="">— choose —</option>
+                    {h2hType === 'teams'
+                      ? [...teams].sort((a, b) => a.name.localeCompare(b.name)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)
+                      : [...players].sort((a, b) => (teamById[a.team_id]?.name || '').localeCompare(teamById[b.team_id]?.name || '') || a.name.localeCompare(b.name)).map((x) => <option key={x.id} value={x.id}>{x.name} ({teamById[x.team_id]?.tag || teamById[x.team_id]?.name})</option>)}
+                  </select>
+                </label>
+              ))}
+            </>
+          )}
+          {results && (
+            <div>
+              <span className="label">Results page</span>
+              <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                {[['group', 'Per group'], ['overall', 'Overall (20 per page)']].map(([k, l]) => (
+                  <button key={k} onClick={() => setView(k)} className={`px-4 py-2 text-xs font-semibold ${view === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
                 ))}
               </div>
             </div>
@@ -209,6 +292,12 @@ export default function TournamentReport() {
       </div>
 
       {/* ---------- A4 pages ---------- */}
+      {h2h && (
+        <div className="a4l-area overflow-x-auto">
+          {!h2hSides && <div className="card py-10 text-center text-sm text-slate-400">Choose two different {h2hType} above to build the head-to-head page.</div>}
+          {h2hSides && <H2HPage sides={h2hSides} sub={[rid === 'all' ? null : roundById[rid]?.name, 'Head to head', h2hType === 'teams' ? 'Tournament record so far' : 'Player record so far'].filter(Boolean).join('  ·  ')} th={th} t={t} />}
+        </div>
+      )}
       {mvp && (
         <div className="a4l-area overflow-x-auto">
           {!mvpPages.length && <div className="card py-10 text-center text-sm text-slate-400">No player eliminations yet. In Tournaments → Results tick the players who played and type their eliminations (run supabase/match-players.sql once).</div>}
@@ -226,11 +315,13 @@ export default function TournamentReport() {
         </div>
       )}
       <div className={`a4-area overflow-x-auto ${land ? 'hidden' : ''}`}>
-        {!pages.length && <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div>}
-        {pages.map((g) => {
+        {!sheetPages.length && <div className="card py-10 text-center text-sm text-slate-400">No groups yet. Draw the groups first.</div>}
+        {sheetPages.map((sp0) => {
+          const g = sp0.g
           const round = roundById[g.round_id]
-          const rows = gts.filter((x) => x.group_id === g.id)
-          const list = results ? rank(rows) : [...rows].sort((a, b) => (a.slot || 0) - (b.slot || 0))
+          const rows = sp0.rows
+          const off = sp0.offset
+          const list = results ? (view === 'overall' ? rows : rank(rows)) : [...rows].sort((a, b) => (a.slot || 0) - (b.slot || 0))
           const nRows = Math.max(1, results ? Math.max(Math.min(10, list.length), Math.ceil(list.length / 2)) : Math.ceil(list.length / 2)) // results: 10 on the left, rest on the right, like the Grand Final post
           const GAP = nRows > 10 ? 1.4 : 2.2 // mm between rows
           const h = Math.min(20, ((results ? 138 : 127) - GAP * (nRows - 1)) / nRows) // box height, mm: rows stretch so the board fills the page
@@ -303,12 +394,12 @@ export default function TournamentReport() {
                         {half.map((x, j) => {
                           const i = k * nRows + j
                           const tm = teamById[x.team_id]
-                          const q = results && (x.qualified || (g.qualify > 0 && i < g.qualify))
+                          const q = results && (x.qualified || (g.qualify > 0 && off + i < g.qualify))
                           const wwcd = Number(x.wwcd) || 0
                           return (
                             <div key={x.id} style={{ display: 'grid', gridTemplateColumns: `${BLK}mm 1fr`, columnGap: '1.5mm', height: `${h}mm` }}>
                               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: th.block, color: '#fff', fontSize: `${fs * 1.5}pt` }}>
-                                {results ? i + 1 : x.slot}
+                                {results ? off + i + 1 : x.slot}
                                 <i style={{ position: 'absolute', left: 0, bottom: 0, width: '2mm', height: '2mm', background: '#fff', clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
                               </div>
                               <div style={{ display: 'grid', gridTemplateColumns: inner, alignItems: 'center', padding: '0 2mm', border: `0.4mm solid ${th.line}`, background: q ? th.fill : '#fff', color: q ? '#fff' : '#0b0b0b', fontSize: `${fs}pt`, letterSpacing: '.02em', textTransform: 'uppercase' }}>
@@ -495,6 +586,66 @@ function MvpPage({ list, offset, page, pages, sub, th, t }) {
         <span>{pages > 1 ? `Page ${page + 1} / ${pages}` : ''}</span>
         {t.sponsor_url && <span style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>Sponsored by <img src={t.sponsor_url} alt="" style={{ height: '11mm', maxWidth: '35mm', objectFit: 'contain' }} /></span>}
       </div>
+    </section>
+  )
+}
+
+/** Head to head: two players (photo) or two teams (logo only), stats in the middle, the better value is highlighted. */
+function H2HPage({ sides, sub, th, t }) {
+  const { a, b, rows } = sides
+  const side = (x, right) => {
+    const isTeam = x.kind === 'team'
+    const logo = isTeam ? x.team?.logo_url : x.team?.logo_url
+    return (
+      <div style={{ position: 'absolute', top: '40mm', bottom: '22mm', [right ? 'right' : 'left']: '10mm', width: '86mm', overflow: 'hidden', background: 'rgba(0,0,0,.35)', borderTop: `0.6mm solid ${th.line}`, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+          {isTeam
+            ? (logo ? <img src={logo} alt="" style={{ position: 'absolute', inset: '8mm', width: 'calc(100% - 16mm)', height: 'calc(100% - 16mm)', objectFit: 'contain', filter: 'drop-shadow(0 2mm 3mm rgba(0,0,0,.5))' }} /> : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '70pt', opacity: 0.35 }}>{String(x.team?.name || '?').slice(0, 2)}</div>)
+            : (x.player?.photo_url ? <img src={x.player.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} /> : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '80pt', opacity: 0.35 }}>{String(x.player?.name || '?').slice(0, 1)}</div>)}
+          {!isTeam && logo && <img src={logo} alt="" style={{ position: 'absolute', [right ? 'left' : 'right']: '3mm', top: '3mm', height: '16mm', width: '16mm', objectFit: 'contain' }} />}
+        </div>
+        <div style={{ background: 'rgba(0,0,0,.45)', borderTop: '0.3mm solid rgba(255,255,255,.18)', padding: '2mm 4mm', textAlign: right ? 'left' : 'right' }}>
+          <div style={{ fontSize: '22pt', lineHeight: 1.05, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: '2mm', justifyContent: right ? 'flex-start' : 'flex-end' }}>
+            {isTeam && <Flag code={x.team?.country} h="5mm" />}{isTeam ? x.team?.name : x.player?.name}
+          </div>
+          {!isTeam && <div style={{ fontSize: '11pt', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.85 }}>{x.team?.name}</div>}
+        </div>
+      </div>
+    )
+  }
+  const better = (va, vb, lowerBetter, diff) => {
+    // diff > 0 means the left side is better (given for rows where a plain number compare is not enough)
+    if (diff != null && diff !== 0) return diff > 0 ? 'a' : 'b'
+    const na = Number(String(va).replace('%', '')), nb = Number(String(vb).replace('%', ''))
+    if (!Number.isFinite(na) || !Number.isFinite(nb) || na === nb || diff === 0) return null
+    return (na > nb) !== !!lowerBetter ? 'a' : 'b'
+  }
+  return (
+    <section
+      className="a4-page relative mx-auto mb-6 overflow-hidden shadow-xl"
+      style={{ width: '297mm', height: '210mm', backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.82) 0, rgba(0,0,0,.7) 34mm, rgba(0,0,0,.3) 50mm, rgba(0,0,0,.5) 100%), url(${th.bg})`, backgroundSize: 'cover', backgroundPosition: 'center', color: '#fff', fontFamily: FONT, fontWeight: 400 }}
+    >
+      {t.logo_url && <img src={t.logo_url} alt="" style={{ position: 'absolute', right: '10mm', top: '8mm', height: '22mm', maxWidth: '40mm', objectFit: 'contain', objectPosition: 'right top' }} />}
+      <div style={{ position: 'absolute', left: '12mm', right: '55mm', top: '10mm' }}>
+        <div style={{ fontSize: '30pt', lineHeight: 1, letterSpacing: '.06em', textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{t.title}</div>
+        <div style={{ marginTop: '2mm', fontSize: '13pt', letterSpacing: '.2em', textTransform: 'uppercase', color: th.line, filter: 'brightness(1.6)' }}>{sub}</div>
+      </div>
+      {side(a, false)}
+      {side(b, true)}
+      <div style={{ position: 'absolute', left: '100mm', right: '100mm', top: '40mm', bottom: '22mm', display: 'flex', flexDirection: 'column', justifyContent: 'space-around' }}>
+        {rows.map(([label, va, vb, lowerBetter, diff]) => {
+          const w = better(va, vb, lowerBetter, diff)
+          const col = (win) => ({ fontSize: '34pt', lineHeight: 1, color: win ? '#fff' : 'rgba(255,255,255,.7)', textShadow: win ? `0 0 14px ${th.line}` : 'none' })
+          return (
+            <div key={label} style={{ display: 'grid', gridTemplateColumns: '1fr 34mm 1fr', alignItems: 'center', columnGap: '2mm' }}>
+              <div style={{ textAlign: 'right', ...col(w === 'a'), paddingRight: '3mm', borderRight: w === 'a' ? `1.2mm solid ${th.line}` : '1.2mm solid transparent' }}>{va}</div>
+              <div style={{ textAlign: 'center', fontSize: '11pt', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.9 }}>{label}</div>
+              <div style={{ textAlign: 'left', ...col(w === 'b'), paddingLeft: '3mm', borderLeft: w === 'b' ? `1.2mm solid ${th.line}` : '1.2mm solid transparent' }}>{vb}</div>
+            </div>
+          )
+        })}
+      </div>
+      {t.sponsor_url && <div style={{ position: 'absolute', right: '10mm', bottom: '6mm', display: 'flex', alignItems: 'center', gap: '3mm', fontSize: '9pt', letterSpacing: '.15em', textTransform: 'uppercase', opacity: 0.9 }}>Sponsored by <img src={t.sponsor_url} alt="" style={{ height: '11mm', maxWidth: '35mm', objectFit: 'contain' }} /></div>}
     </section>
   )
 }

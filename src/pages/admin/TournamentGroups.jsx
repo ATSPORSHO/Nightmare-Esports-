@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shuffle, Trash2, Plus, Save } from 'lucide-react'
+import { Shuffle, Trash2, Plus, Save, Award } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { ErrorBox, Field, Modal, Notice, Spinner } from '../../components/ui'
@@ -56,12 +56,33 @@ export default function TournamentGroups({ tournament, onClose }) {
 
   const active = R.find((r) => r.id === rid) || R[R.length - 1] || null
   const lastRound = R[R.length - 1] || null
+  const setRound = async (r, patch) => {
+    setErr('')
+    const u = await supabase.from('tournament_rounds').update(patch).eq('id', r.id)
+    if (u.error) return setErr(/qualify_mode|qualify_overall|result_view/.test(u.error.message) ? 'Run supabase/round-modes.sql once in Supabase (SQL Editor), then try again.' : u.error.message)
+    reload()
+  }
+  /** overall mode: the best N teams of the whole round (all groups together) are marked qualified */
+  const markOverall = async (r) => {
+    const n = Number(r.qualify_overall) || 0
+    const all = overallRows(r)
+    if (!all.some((x) => totalOf(x) > 0)) return setErr('No results yet: enter the match results first (Results button).')
+    const top = new Set(rank(all).slice(0, n).map((x) => x.id))
+    setBusy(true); setErr('')
+    const jobs = all.map((x) => supabase.from('tournament_group_teams').update({ qualified: top.has(x.id) }).eq('id', x.id))
+    const bad = (await Promise.all(jobs)).find((u) => u.error)
+    setBusy(false)
+    if (bad) return setErr(bad.error.message)
+    setMsg(`Top ${n} teams of ${r.name} (overall) marked as qualified.`)
+    reload()
+  }
   const groupsOf = (r) => G.filter((g) => g.round_id === r?.id)
   const entriesOf = (g) => GT.filter((x) => x.group_id === g.id).sort((a, b) => (a.slot || 0) - (b.slot || 0))
   const placed = new Set(GT.map((x) => x.team_id))
   // teams of the newest round (+ teams not drawn yet), so the list stays short once a new round starts
   const inLast = new Set(lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).map((x) => x.team_id) : [])
   const shownTeams = !lastRound || showAll ? T : T.filter((t) => inLast.has(t.id) || !placed.has(t.id))
+  const overallRows = (r) => groupsOf(r).flatMap((g) => entriesOf(g))
   const qualifiedOfLast = lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).filter((x) => x.qualified).map((x) => teamById[x.team_id]).filter(Boolean) : []
 
   const addTeams = async () => {
@@ -263,9 +284,38 @@ export default function TournamentGroups({ tournament, onClose }) {
                   </div>
                 )}
               </div>
+              {active && (
+                <div className="mb-3 grid gap-3 rounded-xl border border-ink-600 bg-ink-850 p-3 md:grid-cols-3">
+                  <div>
+                    <div className="label">Qualified teams are chosen</div>
+                    <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                      {[['group', 'Per group'], ['overall', 'Overall leaderboard']].map(([k, l]) => (
+                        <button type="button" key={k} onClick={() => setRound(active, { qualify_mode: k })} className={`flex-1 px-3 py-1.5 text-xs font-semibold ${(active.qualify_mode || 'group') === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="label">{active.qualify_mode === 'overall' ? 'Teams qualifying overall' : 'Per group'}</div>
+                    {active.qualify_mode === 'overall' ? (
+                      <div className="flex items-center gap-2">
+                        <input key={active.id + (active.qualify_overall ?? 0)} className="input !w-20" type="number" min="0" defaultValue={active.qualify_overall ?? 0} onBlur={(e) => setRound(active, { qualify_overall: Math.max(0, Number(e.target.value) || 0) })} />
+                        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => markOverall(active)}><Award size={13} /> Mark top {active.qualify_overall || 0}</button>
+                      </div>
+                    ) : <div className="text-xs text-slate-400">Each group uses its own “Qualify” number below.</div>}
+                  </div>
+                  <div>
+                    <div className="label">Visitors see the results</div>
+                    <div className="flex overflow-hidden rounded-lg border border-ink-600">
+                      {[['group', 'Per group'], ['overall', 'Overall'], ['both', 'Both']].map(([k, l]) => (
+                        <button type="button" key={k} onClick={() => setRound(active, { result_view: k })} className={`flex-1 px-3 py-1.5 text-xs font-semibold ${(active.result_view || 'both') === k ? 'bg-accent text-white' : 'text-slate-300 hover:bg-ink-700'}`}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="space-y-4">
                 {groupsOf(active).map((g) => (
-                  <GroupEditor key={g.id + (g.slot_start ?? '') + entriesOf(g).map((x) => x.slot).join('')} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
+                  <GroupEditor key={g.id + (g.slot_start ?? '') + entriesOf(g).map((x) => x.slot).join('') + (active.qualify_mode || '')} overallMode={active.qualify_mode === 'overall'} g={g} groups={groupsOf(active)} entries={entriesOf(g)} allEntries={GT} teamById={teamById} onChanged={reload} />
                 ))}
               </div>
             </>
@@ -276,7 +326,7 @@ export default function TournamentGroups({ tournament, onClose }) {
   )
 }
 
-function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
+function GroupEditor({ overallMode, g, groups, entries, allEntries, teamById, onChanged }) {
   const [f, setF] = useState({
     name: g.name, round: g.round || '', match_date: g.match_date || '', match_time: String(g.match_time || '').slice(0, 5),
     match_note: g.match_note || '', qualify: g.qualify, slot_start: g.slot_start,
@@ -312,7 +362,7 @@ function GroupEditor({ g, groups, entries, allEntries, teamById, onChanged }) {
     const e3 = await saveResults()
     if (e3) { setBusy(false); return setErr(e3.message) }
     // results typed? then the top teams are marked as qualified automatically
-    const e4 = await applyQualified(Number(f.qualify) || 0)
+    const e4 = overallMode ? null : await applyQualified(Number(f.qualify) || 0)
     setBusy(false)
     if (e4) return setErr(e4.message)
     onChanged()

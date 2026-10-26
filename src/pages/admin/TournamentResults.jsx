@@ -175,16 +175,19 @@ export default function TournamentResults({ tournament, onClose }) {
     setBusy(false)
   }
 
+  const overallMode = round?.qualify_mode === 'overall'
+  const roundRows = GT.filter((x) => gList.some((g) => g.id === x.group_id))
   const markQualified = async () => {
     if (!group) return
     setBusy(true); setErr(''); setMsg('')
-    const n = Number(group.qualify) || 0
-    const top = rank(rows).slice(0, n).map((x) => x.id)
-    const a = await supabase.from('tournament_group_teams').update({ qualified: false }).eq('group_id', group.id)
-    const b = top.length ? await supabase.from('tournament_group_teams').update({ qualified: true }).in('id', top) : { error: null }
+    const n = overallMode ? Number(round.qualify_overall) || 0 : Number(group.qualify) || 0
+    const pool = overallMode ? roundRows : rows
+    const top = new Set(rank(pool).slice(0, n).map((x) => x.id))
+    const jobs = pool.map((x) => supabase.from('tournament_group_teams').update({ qualified: top.has(x.id) }).eq('id', x.id))
+    const bad = (await Promise.all(jobs)).find((u) => u.error)
     setBusy(false)
-    if (a.error || b.error) return setErr((a.error || b.error).message)
-    setMsg(`Top ${n} teams marked as qualified.`)
+    if (bad) return setErr(bad.error.message)
+    setMsg(`Top ${n} teams ${overallMode ? '(overall, all groups together) ' : ''}marked as qualified.`)
     reloadAll()
   }
 
@@ -297,7 +300,7 @@ export default function TournamentResults({ tournament, onClose }) {
               <div>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-white">Total standings · {maxMp} match{maxMp === 1 ? '' : 'es'} played</div>
-                  <button className="btn-ghost btn-sm" disabled={busy || !board.length} onClick={markQualified}><Award size={13} /> Mark top {group.qualify} as qualified</button>
+                  <button className="btn-ghost btn-sm" disabled={busy || !board.length} onClick={markQualified}><Award size={13} /> Mark top {overallMode ? round.qualify_overall || 0 : group.qualify}{overallMode ? ' overall' : ''} as qualified</button>
                 </div>
                 <div className="overflow-x-auto rounded-lg border border-ink-700">
                   <table className="w-full text-sm">
@@ -321,6 +324,33 @@ export default function TournamentResults({ tournament, onClose }) {
                   </table>
                 </div>
               </div>
+
+              {gList.length > 1 && (
+                <div>
+                  <div className="mb-2 text-sm font-semibold text-white">Overall standings · {round.name} (all groups together){overallMode ? ` · top ${round.qualify_overall || 0} qualify` : ''}</div>
+                  <div className="overflow-x-auto rounded-lg border border-ink-700">
+                    <table className="w-full text-sm">
+                      <thead className="bg-ink-950 text-[11px] uppercase tracking-wider text-slate-400">
+                        <tr><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">Team</th><th className="px-3 py-2 text-left">Group</th><th className="px-2 py-2">MP</th><th className="px-2 py-2">CD</th><th className="px-2 py-2">PP</th><th className="px-2 py-2">KP</th><th className="px-2 py-2">TP</th></tr>
+                      </thead>
+                      <tbody>
+                        {rank(roundRows).map((x, i) => (
+                          <tr key={x.id} className="border-t border-ink-700/60">
+                            <td className={`px-3 py-1.5 font-bold ${x.qualified ? 'text-emerald-300' : 'text-slate-400'}`}>{i + 1}</td>
+                            <td className="px-3 py-1.5">{teamById[x.team_id]?.name}{x.qualified && <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">QUALIFIED</span>}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{G.find((g) => g.id === x.group_id)?.name}</td>
+                            <td className="px-2 py-1.5 text-center">{x.mp || 0}</td>
+                            <td className="px-2 py-1.5 text-center">{x.wwcd || 0}</td>
+                            <td className="px-2 py-1.5 text-center">{x.place_pts || 0}</td>
+                            <td className="px-2 py-1.5 text-center">{x.kill_pts || 0}</td>
+                            <td className="px-2 py-1.5 text-center font-bold text-white">{two(totalOf(x))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

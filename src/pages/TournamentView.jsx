@@ -44,6 +44,9 @@ export default function TournamentView() {
   const isLatest = current && rounds[rounds.length - 1]?.id === current.id
   const ended = current?.status === 'ended'
   const overall = ended ? rank(shown.flatMap((g) => rowsOf(g))) : []
+  const view = current?.result_view || 'both'   // what visitors see once the round has ended
+  const showOverall = ended && shown.length > 1 && view !== 'group'
+  const showGroups = !(ended && shown.length > 1 && view === 'overall')
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -80,17 +83,18 @@ export default function TournamentView() {
         </div>
       )}
 
-      {ended && shown.length > 1 && (
+      {showOverall && (
         <div className="dark-scope mx-auto max-w-3xl overflow-hidden rounded-2xl border border-red-900/60 bg-ink-950">
           <div className="h-1.5 bg-accent" />
           <div className="bg-ink-900 px-5 py-3 text-center font-display text-sm font-extrabold uppercase tracking-wider text-white">{current.name} — overall leaderboard</div>
+          {current.qualify_mode === 'overall' && current.qualify_overall > 0 && <div className="border-y border-ink-700 bg-ink-950 px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-[#ff5a67]">Top {current.qualify_overall} teams overall qualify</div>}
           <Board entries={overall} teamById={teamById} />
         </div>
       )}
 
       {!shown.length ? (
         <div className="card py-10 text-center text-sm text-slate-400">Groups have not been drawn yet.</div>
-      ) : (
+      ) : !showGroups ? null : (
         <div className={`grid items-start gap-5 ${shown.length > 1 ? 'lg:grid-cols-2' : 'mx-auto max-w-3xl'}`}>
           {shown.map((group) => {
             const rows = rowsOf(group)
@@ -111,7 +115,7 @@ export default function TournamentView() {
                     </div>
                   ))}
                 </div>
-                {group.qualify > 0 && (
+                {group.qualify > 0 && current.qualify_mode !== 'overall' && (
                   <div className="border-y border-ink-700 bg-ink-950 px-5 py-3 text-center text-xs font-bold uppercase tracking-wider text-[#ff5a67]">
                     Top {group.qualify} teams {isLatest ? 'will qualify' : 'qualified'} from this group
                   </div>
