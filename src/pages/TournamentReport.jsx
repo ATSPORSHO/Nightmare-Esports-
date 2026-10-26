@@ -320,7 +320,13 @@ export default function TournamentReport() {
 function StandingsPage({ sp, th, t, teamById, players }) {
   const { ranked, slice, offset, played, c, chunks, sc } = sp
   const leader = teamById[ranked[0]?.team_id]
-  const squad = leader ? players.filter((p) => p.team_id === leader.id).slice(0, 5) : []
+  // squad order: 6 players -> 6,3,1,2,4,5 ; 5 players -> 4,3,1,2,5 ; fewer -> simple order
+  const all = leader ? players.filter((p) => p.team_id === leader.id).slice(0, 6) : []
+  const withPhoto = all.filter((p) => p.photo_url)
+  const base = withPhoto.length ? withPhoto : []
+  const ORD = { 6: [6, 3, 1, 2, 4, 5], 5: [4, 3, 1, 2, 5], 4: [3, 1, 2, 4], 3: [3, 1, 2], 2: [1, 2], 1: [1] }
+  const squad = (ORD[base.length] || []).map((n) => base[n - 1]).filter(Boolean)
+  const mid = (squad.length - 1) / 2
   const sub = [sc.round, sc.name, 'Current standings', played > 0 ? `${played} match${played === 1 ? '' : 'es'} played` : null].filter(Boolean).join('  ·  ')
   const cols = '15mm 1fr 14mm 22mm 18mm 24mm'
   const num = { textAlign: 'center' }
@@ -331,13 +337,13 @@ function StandingsPage({ sp, th, t, teamById, players }) {
     >
       {/* left: #1 team photo */}
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '46%', overflow: 'hidden' }}>
-        {leader?.photo_url
+        {squad.length === 0 && leader?.photo_url
           ? <img src={leader.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
           : squad.length > 0
             ? (
               <div style={{ position: 'absolute', left: '4mm', right: '4mm', bottom: '26mm', top: '40mm', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2mm' }}>
                 {squad.map((p, i) => (
-                  <div key={p.id} style={{ flex: 1, height: `${100 - Math.abs(i - 2) * 9}%`, maxWidth: '30mm', overflow: 'hidden', borderRadius: '2mm 2mm 0 0', background: 'rgba(0,0,0,.35)' }}>
+                  <div key={p.id} style={{ flex: 1, height: `${100 - Math.abs(i - mid) * 11}%`, maxWidth: '34mm', overflow: 'hidden', borderRadius: '2mm 2mm 0 0', background: 'rgba(0,0,0,.35)' }}>
                     {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} /> : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', fontSize: '28pt', opacity: 0.4 }}>{p.name.slice(0, 1)}</div>}
                   </div>
                 ))}
@@ -373,7 +379,7 @@ function StandingsPage({ sp, th, t, teamById, players }) {
                 <span style={{ fontSize: '17pt' }}>#{n}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3mm', minWidth: 0 }}>
                   {tm?.logo_url ? <img src={tm.logo_url} alt="" style={{ height: '12mm', width: '12mm', objectFit: 'contain', flexShrink: 0 }} /> : <span style={{ width: '12mm', flexShrink: 0 }} />}
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase', letterSpacing: '.03em' }}>{tm?.name}</span>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase', letterSpacing: '.03em' }}>{tm?.tag || tm?.name}</span>
                 </span>
                 <span style={num}>{Number(x.wwcd) || 0}</span>
                 <span style={num}>{Number(x.place_pts) || 0}</span>

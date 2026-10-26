@@ -41,6 +41,7 @@ export default function TournamentGroups({ tournament, onClose }) {
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   const T = teams.data || []
   const R = rounds.data || []
@@ -55,6 +56,9 @@ export default function TournamentGroups({ tournament, onClose }) {
   const groupsOf = (r) => G.filter((g) => g.round_id === r?.id)
   const entriesOf = (g) => GT.filter((x) => x.group_id === g.id).sort((a, b) => (a.slot || 0) - (b.slot || 0))
   const placed = new Set(GT.map((x) => x.team_id))
+  // teams of the newest round (+ teams not drawn yet), so the list stays short once a new round starts
+  const inLast = new Set(lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).map((x) => x.team_id) : [])
+  const shownTeams = !lastRound || showAll ? T : T.filter((t) => inLast.has(t.id) || !placed.has(t.id))
   const qualifiedOfLast = lastRound ? groupsOf(lastRound).flatMap((g) => entriesOf(g)).filter((x) => x.qualified).map((x) => teamById[x.team_id]).filter(Boolean) : []
 
   const addTeams = async () => {
@@ -175,9 +179,15 @@ export default function TournamentGroups({ tournament, onClose }) {
             <span className="text-xs text-slate-500">{T.length} teams added</span>
             <button type="button" className="btn-primary btn-sm" disabled={busy || !names.trim()} onClick={addTeams}><Plus size={14} /> Add teams</button>
           </div>
+          {lastRound && T.length > 0 && (
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+              <span>{showAll ? `All ${T.length} teams` : `Showing ${shownTeams.length} teams of “${lastRound.name}” (and teams not drawn yet)`}</span>
+              <button type="button" className="underline hover:text-white" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show current round only' : 'Show all teams'}</button>
+            </div>
+          )}
           {teams.loading ? <Spinner /> : T.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {T.map((t) => (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {shownTeams.map((t) => (
                 <span key={t.id} className={`flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-1.5 text-xs ${t.is_ours ? 'border-accent bg-accent/15 text-white' : 'border-ink-600 text-slate-300'}`}>
                   <LogoPick size={24} value={t.logo_url} onChange={(u) => setLogo(t, u)} />
                   <button type="button" title="Mark as our team (highlighted)" onClick={() => toggleOurs(t)}>{t.is_ours ? '★' : '☆'}</button>
