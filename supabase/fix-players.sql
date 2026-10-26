@@ -1,17 +1,26 @@
--- Fixes "null value in column tournament_id of relation tournament_team_players".
+-- Fixes "null value in column ... of relation tournament_team_players" (old table with extra required columns).
 -- Run once in Supabase -> SQL Editor (new tab).
-alter table public.tournament_team_players add column if not exists tournament_id uuid;
+alter table public.tournament_team_players add column if not exists team_id uuid;
+alter table public.tournament_team_players add column if not exists name text;
 alter table public.tournament_team_players add column if not exists photo_url text;
 alter table public.tournament_team_players add column if not exists sort int not null default 0;
-alter table public.tournament_team_players alter column tournament_id drop not null;
+alter table public.tournament_team_players add column if not exists tournament_id uuid;
 
--- fill the tournament id for players that already exist
-update public.tournament_team_players p
-   set tournament_id = t.tournament_id
-  from public.tournament_teams t
- where t.id = p.team_id and p.tournament_id is null;
+-- make every OTHER column optional (tournament_id, player_id, ...), keep id/team_id/name as they are
+do $$
+declare c record;
+begin
+  for c in
+    select column_name from information_schema.columns
+     where table_schema = 'public' and table_name = 'tournament_team_players'
+       and is_nullable = 'NO' and column_default is null
+       and column_name not in ('id', 'team_id', 'name')
+  loop
+    execute format('alter table public.tournament_team_players alter column %I drop not null', c.column_name);
+  end loop;
+end $$;
 
--- and fill it automatically for every new player
+-- fill tournament_id automatically
 create or replace function public.set_player_tournament() returns trigger language plpgsql as $$
 begin
   if new.tournament_id is null then
@@ -22,5 +31,9 @@ end $$;
 drop trigger if exists trg_set_player_tournament on public.tournament_team_players;
 create trigger trg_set_player_tournament before insert on public.tournament_team_players
   for each row execute function public.set_player_tournament();
+
+-- show the final columns so we can double-check
+select column_name, is_nullable, column_default from information_schema.columns
+ where table_schema = 'public' and table_name = 'tournament_team_players' order by ordinal_position;
 
 select pg_notify('pgrst', 'reload schema');

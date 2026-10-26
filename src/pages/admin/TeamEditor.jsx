@@ -23,6 +23,14 @@ export default function TeamEditor({ team, onClose, onChanged }) {
     if (error) return setErr(error.message)
     onChanged(); onClose()
   }
+  // logo / team photo are saved the moment they are uploaded (no need to press "Save team")
+  const saveImg = async (key, v) => {
+    setF((o) => ({ ...o, [key]: v }))
+    setErr('')
+    const { error } = await supabase.from('tournament_teams').update({ [key]: v || null }).eq('id', team.id)
+    if (error) return setErr(error.message)
+    onChanged()
+  }
   const addPlayer = async () => {
     const name = np.name.trim()
     if (!name) return
@@ -48,8 +56,8 @@ export default function TeamEditor({ team, onClose, onChanged }) {
           <Field label="Team name"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Team tag (short, e.g. NMR)"><input className="input" maxLength={8} value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value.toUpperCase() })} placeholder="NMR" /></Field>
         </div>
-        <ImageField label="Team logo" folder="team" value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
-        <ImageField label="Team photo (squad picture, shown big on the current-standings page when the team is #1)" folder="teamphoto" value={f.photo_url} onChange={(v) => setF({ ...f, photo_url: v })} />
+        <ImageField label="Team logo" folder="team" value={f.logo_url} onChange={(v) => saveImg('logo_url', v)} />
+        <ImageField label="Team photo (squad picture, shown big on the current-standings page when the team is #1)" folder="teamphoto" value={f.photo_url} onChange={(v) => saveImg('photo_url', v)} />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.invited} onChange={(e) => setF({ ...f, invited: e.target.checked })} className="h-4 w-4 accent-[rgb(var(--accent))]" />
           Invited team (skips the first draw and joins a later round you choose)
