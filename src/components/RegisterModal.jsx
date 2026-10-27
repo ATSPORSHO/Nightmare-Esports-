@@ -8,7 +8,7 @@ import { ErrorBox, Field, Modal } from './ui'
 /** Public team registration: 4 players + 2 optional, a Google Drive link with their photos, then a printable confirmation with a code. */
 export default function RegisterModal({ tournament, onClose }) {
   const [tab, setTab] = useState('register')
-  const [f, setF] = useState({ team_name: '', tag: '', country: '', contact: '', drive: '' })
+  const [f, setF] = useState({ team_name: '', tag: '', country: '', leader: '', contact: '', logo_drive: '', drive: '' })
   const [players, setPlayers] = useState(['', '', '', '', '', ''])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -22,15 +22,17 @@ export default function RegisterModal({ tournament, onClose }) {
     setErr('')
     const list = players.map((p) => p.trim()).filter(Boolean)
     if (players.slice(0, 4).some((p) => !p.trim())) return setErr('Players 1 to 4 are required. Players 5 and 6 are optional.')
-    if (!/^https?:\/\/(drive|docs)\.google\.com\//i.test(f.drive.trim())) return setErr('Please add a Google Drive link (drive.google.com) with the player photos.')
+    const okDrive = (u) => /^https?:\/\/(drive|docs)\.google\.com\//i.test(u.trim())
+    if (!okDrive(f.logo_drive)) return setErr('Please add a Google Drive link (drive.google.com) with the team logo.')
+    if (!okDrive(f.drive)) return setErr('Please add a Google Drive link (drive.google.com) with the player photos.')
     setBusy(true)
     const { data, error } = await supabase.rpc('submit_registration', {
-      p_tournament: tournament.id, p_team: f.team_name, p_tag: f.tag, p_country: f.country, p_contact: f.contact, p_players: list, p_drive: f.drive.trim(),
+      p_tournament: tournament.id, p_team: f.team_name, p_tag: f.tag, p_country: f.country, p_leader: f.leader, p_contact: f.contact, p_players: list, p_logo_drive: f.logo_drive.trim(), p_drive: f.drive.trim(),
     })
     setBusy(false)
     if (error) return setErr(/submit_registration|schema cache/i.test(error.message) ? 'Registration is not set up yet (the organizer must run supabase/registration.sql).' : error.message)
     const res = typeof data === 'string' ? JSON.parse(data) : data
-    setDone({ code: res.code, created: res.created_at, tournament: tournament.title, team: f.team_name, tag: f.tag, country: COUNTRIES.find(([c]) => c === f.country)?.[1] || '', contact: f.contact, players: list, drive: f.drive.trim() })
+    setDone({ code: res.code, created: res.created_at, tournament: tournament.title, team: f.team_name, tag: f.tag, country: COUNTRIES.find(([c]) => c === f.country)?.[1] || '', leader: f.leader, contact: f.contact, players: list, logoDrive: f.logo_drive.trim(), drive: f.drive.trim() })
   }
 
   const check = async (e) => {
@@ -89,7 +91,13 @@ export default function RegisterModal({ tournament, onClose }) {
                   </select>
                 </Field>
               )}
-              <Field label="Contact (Discord / WhatsApp / e-mail of the team leader)"><input className="input" required value={f.contact} onChange={set('contact')} /></Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Team leader name"><input className="input" required value={f.leader} onChange={set('leader')} /></Field>
+                <Field label="Team leader contact (Discord / WhatsApp / e-mail)"><input className="input" required value={f.contact} onChange={set('contact')} /></Field>
+              </div>
+              <Field label="Google Drive link with the team logo" hint="Put your logo (PNG with transparent background is best) in Google Drive, set sharing to “Anyone with the link can view”, and paste the link.">
+                <input className="input" required placeholder="https://drive.google.com/…" value={f.logo_drive} onChange={set('logo_drive')} />
+              </Field>
               <div>
                 <div className="label">Players (in-game names): 4 required, 2 optional</div>
                 <div className="grid gap-1.5 sm:grid-cols-2">
