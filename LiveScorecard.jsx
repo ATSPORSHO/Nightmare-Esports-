@@ -115,9 +115,26 @@ export function EliminationPopup({ item, theme = 'blue' }) {
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
   if (!item) return null
   return (
-    <div style={{ position: 'absolute', left: 240, top: 110, width: 900, fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff', animation: 'lsPop 4s ease-in-out forwards', transformOrigin: 'top center' }}>
-      <style>{`@keyframes lsPop{0%{transform:translateY(-40px) scaleY(.2);opacity:0}9%{transform:translateY(0) scaleY(1.06);opacity:1}14%{transform:scaleY(1)}86%{transform:scaleY(1);opacity:1}100%{transform:translateY(-30px) scaleY(.6);opacity:0}}`}</style>
-      <div style={{ display: 'flex', alignItems: 'stretch', background: '#0a101c', border: `2px solid ${th.line}`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.6)' }}>
+    <div style={{ position: 'absolute', left: 240, top: 80, width: 900, fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff', animation: 'lsGlitch 3.6s linear forwards' }}>
+      <style>{`
+        @keyframes lsGlitch{
+          0%{opacity:0;transform:translateX(0)}
+          2%{opacity:1;transform:translateX(-18px) skewX(14deg);clip-path:inset(10% 0 55% 0);filter:drop-shadow(5px 0 0 #ff003c) drop-shadow(-5px 0 0 #00e5ff)}
+          4%{opacity:.2;transform:translateX(14px) skewX(-10deg);clip-path:inset(60% 0 8% 0)}
+          6%{opacity:1;transform:translateX(-8px);clip-path:inset(0 0 35% 0);filter:drop-shadow(-4px 0 0 #ff003c) drop-shadow(4px 0 0 #00e5ff)}
+          8%{opacity:0;transform:translateX(10px)}
+          10%{opacity:1;transform:translateX(5px) skewX(-6deg);clip-path:inset(30% 0 20% 0)}
+          12%{opacity:.6;transform:translateX(-3px);clip-path:inset(0);filter:drop-shadow(3px 0 0 #ff003c) drop-shadow(-3px 0 0 #00e5ff)}
+          14%,86%{opacity:1;transform:none;clip-path:inset(0);filter:none}
+          88%{opacity:1;transform:translateX(12px) skewX(10deg);clip-path:inset(0 0 50% 0);filter:drop-shadow(5px 0 0 #ff003c) drop-shadow(-5px 0 0 #00e5ff)}
+          90%{opacity:.3;transform:translateX(-16px);clip-path:inset(45% 0 0 0)}
+          92%{opacity:1;transform:translateX(7px) skewX(-8deg);clip-path:inset(15% 0 40% 0);filter:drop-shadow(-4px 0 0 #ff003c) drop-shadow(4px 0 0 #00e5ff)}
+          95%{opacity:0;transform:translateX(-10px)}
+          97%{opacity:.7;transform:translateX(4px);clip-path:inset(55% 0 5% 0)}
+          100%{opacity:0;transform:translateX(0);clip-path:inset(0)}
+        }
+      `}</style>
+      <div style={{ transform: 'scale(.6)', transformOrigin: 'top center', display: 'flex', alignItems: 'stretch', background: '#0a101c', border: `2px solid ${th.line}`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.6)' }}>
         <div style={{ background: 'linear-gradient(180deg,#d90429,#7f0a0a)', padding: '0 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: 150 }}>
           <span style={{ fontSize: 16, letterSpacing: '.22em' }}>ELIMINATED</span>
           <span style={{ fontSize: 54, lineHeight: 1 }}>#{item.placement}</span>
