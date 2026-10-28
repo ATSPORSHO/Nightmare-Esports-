@@ -57,15 +57,15 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
         <span style={{ fontSize: 22, letterSpacing: '.06em', textTransform: 'uppercase', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
         <span style={{ fontSize: 15, letterSpacing: '.1em', opacity: 0.9 }}>{alive} ALIVE</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 62px 62px', alignItems: 'center', background: 'rgba(5,8,18,.92)', padding: '4px 14px 4px 0', fontSize: 14, letterSpacing: '.12em', color: '#aab', textAlign: 'center' }}>
-        <span>#</span><span style={{ textAlign: 'left', paddingLeft: 44 }}>TEAM</span><span>ELIMS</span><span>PTS</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', background: '#0a101c', padding: '4px 14px 4px 0', fontSize: 14, letterSpacing: '.12em', color: '#aab', textAlign: 'center' }}>
+        <span>#</span><span style={{ textAlign: 'left', paddingLeft: 44 }}>TEAMS</span><span>ALIVE</span><span>ELIMS</span><span>PTS</span>
       </div>
-      <div style={{ position: 'relative', height: rows.length * ROW, background: 'rgba(5,8,18,.82)', borderRadius: '0 0 6px 6px', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: rows.length * ROW, background: '#0d1524', overflow: 'hidden' }}>
         {rows.map((r) => {
           const f = fx[r.id] || {}
           const fade = { opacity: r.alive || f.elim ? 1 : 0.3, filter: r.alive || f.elim ? 'none' : 'grayscale(1)', transition: 'opacity 1.4s ease 0.2s, filter 1.4s ease 0.2s' }
           return (
-            <div key={r.id} className={f.elim ? 'ls-shake' : f.pts ? 'ls-glow' : ''} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: ROW, transform: `translateY(${(r.rank - 1) * ROW}px)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1)', display: 'grid', gridTemplateColumns: '44px 1fr 62px 62px', alignItems: 'center', padding: '0 14px 0 0', borderTop: '1px solid rgba(255,255,255,.08)', background: r.rank === 1 ? `${th.line}33` : 'transparent', overflow: 'hidden' }}>
+            <div key={r.id} className={f.elim ? 'ls-shake' : f.pts ? 'ls-glow' : ''} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: ROW, transform: `translateY(${(r.rank - 1) * ROW}px)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1)', display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', padding: '0 14px 0 0', borderTop: '1px solid rgba(255,255,255,.08)', background: r.rank === 1 ? `linear-gradient(${th.line}40,${th.line}40), #101a2c` : r.rank % 2 ? '#101a2c' : '#0d1524', overflow: 'hidden' }}>
               {f.elim && <div style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(90deg,#7f0a0a,#d90429 50%,#7f0a0a)', animation: 'lsElim 3s ease-in-out forwards', fontSize: 26, letterSpacing: '.18em' }}>ELIMINATED<span style={{ background: '#fff', color: '#b00020', borderRadius: 4, padding: '0 8px' }}>#{r.placement}</span></div>}
               <div style={{ textAlign: 'center', fontSize: 24, color: r.rank <= 3 ? '#fff' : '#cfd3e0', position: 'relative' }}>
                 {r.rank}
@@ -78,15 +78,19 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
                 </span>
                 <Flag code={r.country} h="12px" />
                 <span style={{ fontSize: 22, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.tag || r.name}</span>
-                {r.alive
-                  ? <i style={{ width: 9, height: 9, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e', flexShrink: 0 }} />
-                  : <span style={{ fontSize: 13, letterSpacing: '.08em', color: '#ef4444', flexShrink: 0 }}>#{r.placement} OUT</span>}
+                {!r.alive && <span style={{ fontSize: 13, letterSpacing: '.08em', color: '#ef4444', flexShrink: 0 }}>#{r.placement} OUT</span>}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 3, ...fade }}>
+                {[0, 1, 2, 3].map((i) => { const c = r.alive ? ((r.pl || [])[i] || 'a') : 'd'; return <i key={i} style={{ width: 8, height: 22, borderRadius: 1, background: c === 'a' ? '#22c55e' : c === 'k' ? '#ef4444' : '#5b6270', transition: 'background .4s' }} /> })}
               </div>
               <div style={{ textAlign: 'center', fontSize: 24, ...fade }}><span className={f.kills ? 'ls-flash' : ''}>{r.kills}</span></div>
               <div style={{ textAlign: 'center', fontSize: 28, ...fade }}><span className={f.pts ? 'ls-flash' : ''}>{r.tp}</span></div>
             </div>
           )
         })}
+      </div>
+      <div style={{ display: 'flex', gap: 16, background: '#0a101c', padding: '6px 14px', fontSize: 13, letterSpacing: '.1em', color: '#aab', borderRadius: '0 0 6px 6px' }}>
+        {[['#22c55e', 'ALIVE'], ['#ef4444', 'KNOCKED'], ['#5b6270', 'ELIMINATED']].map(([c, l]) => <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, background: c, display: 'inline-block' }} />{l}</span>)}
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ export default function LiveView() {
 
   useEffect(() => {
     const css = document.createElement('style')
-    css.textContent = `html,body,#root{background:${params.get('bg') === 'dark' ? '#05070f' : 'transparent'} !important}`
+    css.textContent = `html,body{overflow:hidden !important}html,body,#root{background:${params.get('bg') === 'dark' ? '#05070f' : 'transparent'} !important}`
     document.head.appendChild(css)
     return () => css.remove()
   }, [params])

@@ -75,7 +75,7 @@ function NewSession({ tours, onCreated }) {
     const ids = (gt.data || []).map((x) => x.team_id)
     const tm = ids.length ? await supabase.from('tournament_teams').select('*').in('id', ids) : { data: [] }
     const slotOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.slot || 99]))
-    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0 }))
+    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] }))
     if (!teams.length) { setBusy(false); return setErr('This group has no teams yet.') }
     const ttl = tours.find((t) => t.id === tid)?.title
     const { data, error } = await supabase.from('tbroadcast_sessions').insert({
@@ -107,6 +107,16 @@ function NewSession({ tours, onCreated }) {
   )
 }
 
+/** Number box that only changes the live scoreboard when you press Enter (Esc cancels). */
+function EnterNum({ value, onCommit, className = '', ...rest }) {
+  const [d, setD] = useState(null)
+  const shown = d ?? (value ?? '')
+  return <input {...rest} type="number" className={`${className} ${d !== null ? '!border-amber-400' : ''}`} value={shown}
+    onChange={(e) => setD(e.target.value)}
+    onKeyDown={(e) => { if (e.key === 'Enter') { onCommit(d ?? shown); setD(null); e.target.blur() } if (e.key === 'Escape') { setD(null); e.target.blur() } }}
+    onBlur={() => setD(null)} title="Type, then press Enter to send to the live scoreboard" />
+}
+
 function Control({ session, onClose, onEnded }) {
   const [st, setSt] = useState(session.state || { teams: [], history: [] })
   const [mode, setMode] = useState(session.mode)
@@ -136,12 +146,12 @@ function Control({ session, onClose, onEnded }) {
   const patch = (id, p) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, ...p } : t)) }))
   const kill = (id, d) => patch(id, { kills: Math.max(0, (Number(st.teams.find((t) => t.id === id).kills) || 0) + d) })
   const [pend, setPend] = useState(null) // { id, value } — rank typed when eliminating
-  const eliminate = (id, rank) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, placement: Number(rank) || alive } : t)), history: [...(o.history || []), id] }))
+  const eliminate = (id, rank) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, placement: Number(rank) || alive, pl: ['d', 'd', 'd', 'd'] } : t)), history: [...(o.history || []), id] }))
   const undo = () => update((o) => {
     const h = [...(o.history || [])]; const last = h.pop()
-    return last ? { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null } : t)) } : o
+    return last ? { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null, pl: ['a', 'a', 'a', 'a'] } : t)) } : o
   })
-  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0 })) })) }
+  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] })) })) }
   const setMd = (m) => { setMode(m); push() }
   const setTh = (t) => { setTheme(t); push() }
   const link = linkOf(session.id, theme)
@@ -210,11 +220,12 @@ function Control({ session, onClose, onEnded }) {
                     </>
                   ) : (
                     <>
-                      <label className="text-[10px] text-slate-500">Kills <input className="input !w-14 !px-1 !py-0.5 text-center" type="number" min="0" value={t.kills ?? 0} onChange={(e) => patch(t.id, { kills: e.target.value })} /></label>
-                      <label className="text-[10px] text-slate-500">Place <input className="input !w-14 !px-1 !py-0.5 text-center" type="number" min="1" max="25" placeholder="alive" value={t.placement ?? ''} onChange={(e) => patch(t.id, { placement: e.target.value === '' ? null : Number(e.target.value) })} /></label>
-                      <label className="text-[10px] text-slate-500">± pts <input className="input !w-14 !px-1 !py-0.5 text-center" type="number" value={t.adj ?? 0} onChange={(e) => patch(t.id, { adj: e.target.value })} /></label>
+                      <label className="text-[10px] text-slate-500">Kills <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" min="0" value={t.kills ?? 0} onCommit={(v) => patch(t.id, { kills: Math.max(0, Number(v) || 0) })} /></label>
+                      <label className="text-[10px] text-slate-500">Place <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" min="1" max="25" placeholder="alive" value={t.placement ?? ''} onCommit={(v) => patch(t.id, { placement: v === '' ? null : Number(v), pl: v === '' ? undefined : ['d', 'd', 'd', 'd'] })} /></label>
+                      <label className="text-[10px] text-slate-500">± pts <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" value={t.adj ?? 0} onCommit={(v) => patch(t.id, { adj: Number(v) || 0 })} /></label>
                     </>
                   )}
+                  {isAlive && <span className="flex gap-0.5" title="Players: click to change alive → knocked → out">{[0, 1, 2, 3].map((i) => { const c = (t.pl || [])[i] || 'a'; return <button key={i} type="button" onClick={() => patch(t.id, { pl: [0, 1, 2, 3].map((j) => (j === i ? { a: 'k', k: 'd', d: 'a' }[c] : (t.pl || [])[j] || 'a')) })} className="h-5 w-2.5 rounded-sm" style={{ background: c === 'a' ? '#22c55e' : c === 'k' ? '#ef4444' : '#5b6270' }} /> })}</span>}
                   <span className="w-10 text-right font-display text-lg font-extrabold text-amber-300" title="Points">{rows.find((r) => r.id === t.id)?.tp}</span>
                 </div>
               )
