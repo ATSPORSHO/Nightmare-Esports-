@@ -3,7 +3,44 @@ import { Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { COUNTRIES } from '../lib/countries'
 import { printConfirmation } from '../lib/regForm'
+import { CEO_SIGNATURE } from '../lib/signature'
 import { ErrorBox, Field, Modal } from './ui'
+
+/** The confirmation form on screen (same content as the printed one) so people can screenshot it or print it. */
+function ConfirmationCard({ d }) {
+  const row = (k, v) => v ? <tr><td className="w-[34%] border border-neutral-400 bg-neutral-100 px-2.5 py-1.5 font-bold">{k}</td><td className="break-all border border-neutral-400 px-2.5 py-1.5">{v}</td></tr> : null
+  return (
+    <div className="mx-auto w-full max-w-[560px] overflow-hidden bg-white text-left text-[12px] text-neutral-900 shadow-lg">
+      <div className="h-2.5 bg-[#c8102e]" />
+      <div className="px-5 pb-5 pt-4">
+        <div className="text-lg font-extrabold uppercase tracking-wide">Registration confirmation</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#c8102e]">{d.tournament}</div>
+        <div className="my-3 border-[3px] border-neutral-900 py-2 text-center">
+          <div className="text-[9px] uppercase tracking-[0.3em]">Confirmation code</div>
+          <div className="text-5xl font-extrabold tracking-widest">#{d.code}</div>
+        </div>
+        <table className="w-full border-collapse">
+          <tbody>
+            {row('Team name', `${d.team}${d.tag ? ` [${d.tag}]` : ''}`)}
+            {row('Country', d.country)}
+            {row('Team leader', d.leader)}
+            {row('Contact', d.contact)}
+            {row('Players', <>{d.players.map((p, i) => <div key={i}>{i + 1}. {p}{i >= 4 ? ' (optional)' : ''}</div>)}</>)}
+            {row('Team logo (Google Drive)', d.logoDrive)}
+            {row('Player photos (Google Drive)', d.drive)}
+            {row('Submitted', new Date(d.created).toLocaleString('en-GB'))}
+            {row('Status', 'Pending – confirmed by the organizers')}
+          </tbody>
+        </table>
+        <div className="mt-3 border-l-4 border-[#c8102e] pl-3 text-[11px] leading-relaxed">Keep this form. Your registration is only confirmed when the organizers approve it, and you will need the code <b>#{d.code}</b> to confirm it with them.</div>
+        <div className="mt-4 flex flex-col items-center">
+          <img src={CEO_SIGNATURE} alt="" className="-mb-1 h-12" />
+          <div className="w-52 border-t border-black pt-1 text-center text-[10px] font-bold uppercase tracking-wider">CEO of Nightmare Esports Org</div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Public team registration: 4 players + 2 optional, a Google Drive link with their photos, then a printable confirmation with a code. */
 export default function RegisterModal({ tournament, onClose }) {
@@ -43,15 +80,12 @@ export default function RegisterModal({ tournament, onClose }) {
   }
 
   return (
-    <Modal title={`Register — ${tournament.title}`} onClose={onClose}>
+    <Modal title={`Register — ${tournament.title}`} onClose={onClose} wide={!!done}>
       {done ? (
         <div className="space-y-3 py-2 text-center">
           <div className="text-lg font-bold text-white">Registration received ✓</div>
-          <div className="rounded-xl border border-red-700/60 bg-black/40 py-4">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Your confirmation code</div>
-            <div className="font-display text-5xl font-extrabold tracking-widest text-white">#{done.code}</div>
-          </div>
-          <p className="text-sm text-slate-400">Print or save the confirmation form and keep the code. Your registration is confirmed only when the organizers approve it, and they will ask for this code.</p>
+          <p className="text-sm text-slate-400">Take a screenshot of this confirmation form or print it, and keep the code. Your registration is confirmed only when the organizers approve it, and they will ask for this code.</p>
+          <ConfirmationCard d={done} />
           <div className="flex justify-center gap-2">
             <button className="btn-primary" onClick={() => printConfirmation(done)}><Printer size={15} /> Print confirmation</button>
             <button className="btn-ghost" onClick={onClose}>Close</button>

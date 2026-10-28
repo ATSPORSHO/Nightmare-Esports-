@@ -19,6 +19,7 @@ import Submit from './pages/Submit'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
 import Admin from './pages/Admin'
+import LiveView from './pages/LiveView'
 import { Spinner } from './components/ui'
 
 function Guard({ roles, children }) {
@@ -69,6 +70,7 @@ export default function App() {
           <NextRedirect />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/live/:id" element={<LiveView />} />
             <Route element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="tournament/:id" element={<TournamentView />} />

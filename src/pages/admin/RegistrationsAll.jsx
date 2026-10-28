@@ -66,7 +66,7 @@ export default function RegistrationsAll({ tournamentId = null }) {
       if (u.error) throw u.error
       setMsg(`Registration cancelled. Token #${r.reg_code} can be used again.${note}`)
       reload()
-    } catch (e) { setErr(e.message || String(e)) }
+    } catch (e) { setErr(/reg_code/.test(e.message || '') ? 'The database is not updated yet. Run supabase/fix-reg-code.sql once in Supabase (SQL Editor), then press Cancel again.' : (e.message || String(e))) }
     setBusy('')
   }
 
