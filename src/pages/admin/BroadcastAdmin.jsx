@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Radio, Copy, Undo2, RotateCcw, Square, Minus, Plus, Trash2, Play } from 'lucide-react'
+import { Radio, Copy, Undo2, RotateCcw, Square, Minus, Plus, Play } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { Card, ErrorBox, Field, Notice, Spinner } from '../../components/ui'
+import ImageField from '../../components/ImageField'
 import LiveScorecard from '../../components/LiveScorecard'
 import { computeRows, LIVE_THEMES } from '../../lib/live'
+import { placementPoints } from '../../lib/points'
 
 const linkOf = (id, theme) => `${window.location.origin}${window.location.pathname}#/live/${id}${theme ? `?theme=${theme}` : ''}`
 
@@ -12,22 +14,21 @@ const linkOf = (id, theme) => `${window.location.origin}${window.location.pathna
  * Broadcast: every session gets its own link. While it is live the scorecard updates by itself on the link.
  * Automatic = one-click buttons (kill +1, Eliminate), placement and points are worked out for you.
  * Manual = you type kills / placement / point adjustments yourself.
- * End = the live data is deleted from the broadcast, only the final result is kept in "Final reports".
+ * End = the live data is deleted from the broadcast, the match result is saved into the tournament Results.
  */
 export default function BroadcastAdmin() {
-  const tours = useData(() => supabase.from('tournaments').select('id, title').order('start_date', { ascending: false }))
+  const tours = useData(() => supabase.from('tournaments').select('id, title, logo_url').order('start_date', { ascending: false }))
   const sessions = useData(() => supabase.from('tbroadcast_sessions').select('*').eq('status', 'live').order('created_at', { ascending: false }))
-  const finals = useData(() => supabase.from('tbroadcast_finals').select('*').order('ended_at', { ascending: false }))
   const [openId, setOpenId] = useState(null)
   const [msg, setMsg] = useState('')
   const open = (sessions.data || []).find((s) => s.id === openId)
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-400">Create a broadcast session, copy its link into OBS (Browser Source) or open it in a browser, and run the scorecard from here. When you press <b>End</b> the live data disappears from the link and only the final result is saved under <b>Final reports</b>.</p>
+      <p className="text-sm text-slate-400">Create a broadcast session, copy its link into OBS (Browser Source) or open it in a browser, and run the scorecard from here. When you press <b>End</b> the live data disappears from the link and the match result is saved automatically into the tournament <b>Results</b>, ready for the A4 report.</p>
       {msg && <Notice>{msg}</Notice>}
       {open
-        ? <Control key={open.id} session={open} onClose={() => setOpenId(null)} onEnded={(m) => { setMsg(m); setOpenId(null); sessions.reload(); finals.reload() }} />
+        ? <Control key={open.id} session={open} onClose={() => setOpenId(null)} onEnded={(m) => { setMsg(m); setOpenId(null); sessions.reload() }} />
         : (
           <>
             <NewSession tours={tours.data || []} onCreated={(id) => { sessions.reload(); setOpenId(id) }} />
@@ -47,7 +48,6 @@ export default function BroadcastAdmin() {
             </Card>
           </>
         )}
-      <FinalReports finals={finals} />
     </div>
   )
 }
@@ -77,9 +77,11 @@ function NewSession({ tours, onCreated }) {
     const slotOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.slot || 99]))
     const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] }))
     if (!teams.length) { setBusy(false); return setErr('This group has no teams yet.') }
-    const ttl = tours.find((t) => t.id === tid)?.title
+    const tr0 = tours.find((t) => t.id === tid)
+    const ttl = tr0?.title
+    const mc = await supabase.from('tournament_matches').select('number').eq('group_id', group.id).order('number', { ascending: false }).limit(1)
     const { data, error } = await supabase.from('tbroadcast_sessions').insert({
-      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name },
+      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name, info: { tournament: ttl || '', logo: tr0?.logo_url || '', match: String((mc.data?.[0]?.number || 0) + 1), map: '' } },
     }).select('id').single()
     setBusy(false)
     if (error) return setErr(/tbroadcast_sessions|schema cache/i.test(error.message) ? 'Run supabase/broadcast.sql once in Supabase (SQL Editor), then try again.' : error.message)
@@ -115,6 +117,24 @@ function EnterNum({ value, onCommit, className = '', ...rest }) {
     onChange={(e) => setD(e.target.value)}
     onKeyDown={(e) => { if (e.key === 'Enter') { onCommit(d ?? shown); setD(null); e.target.blur() } if (e.key === 'Escape') { setD(null); e.target.blur() } }}
     onBlur={() => setD(null)} title="Type, then press Enter to send to the live scoreboard" />
+}
+
+/** Match overlay: tournament name + logo, match number, map. Sent to the live scoreboard when you press Apply. */
+function InfoEditor({ info, onApply }) {
+  const [d, setD] = useState({ tournament: '', logo: '', match: '', map: '', ...info })
+  const dirty = JSON.stringify({ tournament: '', logo: '', match: '', map: '', ...info }) !== JSON.stringify(d)
+  return (
+    <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Match overlay (shown above the scorecard)</div>
+      <div className="grid gap-3 md:grid-cols-[1fr_110px_1fr_200px]">
+        <Field label="Tournament name"><input className="input" value={d.tournament} onChange={(e) => setD({ ...d, tournament: e.target.value })} /></Field>
+        <Field label="Match no."><input className="input" value={d.match} onChange={(e) => setD({ ...d, match: e.target.value })} /></Field>
+        <Field label="Map name"><input className="input" list="bc-maps" value={d.map} onChange={(e) => setD({ ...d, map: e.target.value })} placeholder="Erangel" /><datalist id="bc-maps">{['Erangel', 'Miramar', 'Rondo', 'Sanhok', 'Vikendi', 'Livik', 'Karakin'].map((m) => <option key={m} value={m} />)}</datalist></Field>
+        <ImageField label="Tournament logo" folder="tournament" value={d.logo || null} onChange={(v) => setD({ ...d, logo: v || '' })} />
+      </div>
+      <button className={`mt-2 ${dirty ? 'btn-primary' : 'btn-ghost'} btn-sm`} disabled={!dirty} onClick={() => onApply(d)}>{dirty ? 'Apply to live scoreboard' : 'Applied ✓'}</button>
+    </div>
+  )
 }
 
 function Control({ session, onClose, onEnded }) {
@@ -157,21 +177,51 @@ function Control({ session, onClose, onEnded }) {
   const link = linkOf(session.id, theme)
 
   const end = async () => {
-    if (!window.confirm('End this broadcast?\n\nThe live scorecard and its link are deleted. Only the final result is saved in Final reports.')) return
+    if (!window.confirm('End this broadcast?\n\nThe live scorecard and its link are deleted. The match result is saved into the tournament Results (and the A4 reports).')) return
     setBusy(true); setErr('')
     clearTimeout(timer.current)
-    // teams still alive at the end get the best placements, ordered by kills
-    const fin = { ...st, teams: st.teams.map((t) => ({ ...t })) }
-    const stillAlive = fin.teams.filter((t) => t.placement == null || t.placement === '').sort((a, b) => (Number(b.kills) || 0) - (Number(a.kills) || 0))
-    stillAlive.forEach((t, i) => { t.placement = i + 1 })
-    const rows = computeRows(fin, 'manual').map((r) => ({ rank: r.rank, team: r.name, tag: r.tag, country: r.country, placement: r.placement, kills: r.kills, pp: r.pp, adj: Number(r.adj) || 0, tp: r.tp }))
-    const tr = session.tournament_id ? await supabase.from('tournaments').select('title').eq('id', session.tournament_id).maybeSingle() : { data: null }
-    const ins = await supabase.from('tbroadcast_finals').insert({ tournament_id: session.tournament_id, tournament_title: tr.data?.title || null, group_name: st.group || null, title: session.title, mode, final: rows, started_at: session.created_at })
-    if (ins.error) { setBusy(false); return setErr(/tbroadcast_finals|schema cache/i.test(ins.error.message) ? 'Run supabase/broadcast.sql once in Supabase (SQL Editor).' : ins.error.message) }
-    const del = await supabase.from('tbroadcast_sessions').delete().eq('id', session.id)
+    try {
+      if (!session.group_id || !session.tournament_id) throw new Error('This session is not linked to a tournament group.')
+      // teams still alive at the end get the best placements, ordered by kills
+      const teams = st.teams.map((t) => ({ ...t, kills: Number(t.kills) || 0 }))
+      teams.filter((t) => t.placement == null || t.placement === '').sort((a, b) => b.kills - a.kills).forEach((t, i) => { t.placement = i + 1 })
+      // placements must be unique: if two teams share one, order by placement then kills and renumber
+      const used = teams.map((t) => Number(t.placement))
+      if (new Set(used).size !== used.length) [...teams].sort((a, b) => a.placement - b.placement || b.kills - a.kills).forEach((t, i) => { t.placement = i + 1 })
+
+      const gm = await supabase.from('tournament_matches').select('number').eq('group_id', session.group_id).order('number', { ascending: false }).limit(1)
+      const number = (gm.data?.[0]?.number || 0) + 1
+      const m = await supabase.from('tournament_matches').insert({ tournament_id: session.tournament_id, group_id: session.group_id, number }).select('id').single()
+      if (m.error) throw m.error
+      const ins = await supabase.from('tournament_match_results').insert(teams.map((t) => ({ match_id: m.data.id, team_id: t.id, placement: Number(t.placement), kills: t.kills })))
+      if (ins.error) { await supabase.from('tournament_matches').delete().eq('id', m.data.id); throw ins.error }
+
+      // re-add every saved match of this group into the group table
+      const ms = await supabase.from('tournament_matches').select('id').eq('group_id', session.group_id)
+      const ids = (ms.data || []).map((x) => x.id)
+      const rs = await supabase.from('tournament_match_results').select('*').in('match_id', ids)
+      if (rs.error) throw rs.error
+      const agg = {}
+      ;(rs.data || []).forEach((r) => {
+        if (r.placement == null) return
+        const a = (agg[r.team_id] ||= { mp: 0, wwcd: 0, place_pts: 0, kill_pts: 0 })
+        a.mp += 1; if (r.placement === 1) a.wwcd += 1
+        a.place_pts += placementPoints(r.placement); a.kill_pts += Number(r.kills) || 0
+      })
+      const fresh = await supabase.from('tournament_group_teams').select('*').eq('group_id', session.group_id)
+      if (fresh.error) throw fresh.error
+      const ups = await Promise.all((fresh.data || []).map((x) => {
+        const a = { ...(agg[x.team_id] || { mp: 0, wwcd: 0, place_pts: 0, kill_pts: 0 }) }
+        a.wwcd += Number(x.cd_extra) || 0
+        return supabase.from('tournament_group_teams').update(a).eq('id', x.id)
+      }))
+      if (ups.find((u) => u.error)) throw ups.find((u) => u.error).error
+
+      const del = await supabase.from('tbroadcast_sessions').delete().eq('id', session.id)
+      if (del.error) throw new Error(`The result was saved, but the live session could not be deleted: ${del.error.message}`)
+      onEnded(`Broadcast ended. Match ${number} was saved in the tournament Results — you can print it from the A4 report.`)
+    } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
-    if (del.error) return setErr(`The final result was saved, but the live session could not be deleted: ${del.error.message}`)
-    onEnded(`Broadcast “${session.title}” ended. The live data was deleted and the final result is saved in Final reports.`)
   }
 
   const rows = computeRows(st, mode)
@@ -189,6 +239,7 @@ function Control({ session, onClose, onEnded }) {
         <button className="btn-primary btn-sm !bg-red-700" disabled={busy} onClick={end}><Square size={13} /> End broadcast</button>
       </div>
       <ErrorBox>{err}</ErrorBox>
+      <InfoEditor info={st.info || {}} onApply={(info) => update((o) => ({ ...o, info }))} />
       <div className="grid gap-4 xl:grid-cols-[1fr_580px]">
         <div className="rounded-xl border border-ink-700">
           <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-950 px-3 py-2 text-xs text-slate-400">
@@ -238,38 +289,5 @@ function Control({ session, onClose, onEnded }) {
         </div>
       </div>
     </div>
-  )
-}
-
-function FinalReports({ finals }) {
-  const [openId, setOpenId] = useState(null)
-  const list = finals.data || []
-  const remove = async (f) => { if (window.confirm(`Delete the final report “${f.title}”?`)) { await supabase.from('tbroadcast_finals').delete().eq('id', f.id); finals.reload() } }
-  return (
-    <Card title="Final reports (saved when a broadcast ends)">
-      {finals.loading ? <Spinner /> : !list.length ? <div className="py-4 text-center text-sm text-slate-500">No final reports yet.</div> : (
-        <ul className="divide-y divide-ink-700/60">
-          {list.map((f) => (
-            <li key={f.id} className="py-2.5">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-[180px] flex-1"><div className="font-medium text-white">{f.title}</div><div className="text-xs text-slate-500">{f.tournament_title || ''} {f.group_name ? `· ${f.group_name}` : ''} · {new Date(f.ended_at).toLocaleString('en-GB')} · {f.mode === 'auto' ? 'Automatic' : 'Manual'}</div></div>
-                <button className="btn-ghost btn-sm" onClick={() => setOpenId(openId === f.id ? null : f.id)}>{openId === f.id ? 'Hide' : 'View'}</button>
-                <button className="btn-ghost btn-sm text-red-300" onClick={() => remove(f)}><Trash2 size={13} /></button>
-              </div>
-              {openId === f.id && (
-                <div className="mt-2 overflow-x-auto rounded-lg border border-ink-700">
-                  <table className="w-full text-sm">
-                    <thead className="bg-ink-950 text-[11px] uppercase tracking-wider text-slate-400"><tr><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">Team</th><th className="px-2 py-2">Place</th><th className="px-2 py-2">Elims</th><th className="px-2 py-2">PP</th><th className="px-2 py-2">± </th><th className="px-2 py-2">Total</th></tr></thead>
-                    <tbody>{(f.final || []).map((r) => (
-                      <tr key={r.rank} className="border-t border-ink-700/60"><td className="px-3 py-1.5 font-bold text-slate-300">{r.rank}</td><td className="px-3 py-1.5">{r.team}{r.tag ? ` [${r.tag}]` : ''}</td><td className="px-2 py-1.5 text-center">{r.placement}</td><td className="px-2 py-1.5 text-center">{r.kills}</td><td className="px-2 py-1.5 text-center">{r.pp}</td><td className="px-2 py-1.5 text-center">{r.adj || 0}</td><td className="px-2 py-1.5 text-center font-bold text-white">{r.tp}</td></tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
   )
 }

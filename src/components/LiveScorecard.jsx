@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { computeRows, LIVE_THEMES } from '../lib/live'
 import Flag from './Flag'
 
-const ROW = 46 // px
+const ROW_DEFAULT = 46 // px
 
 /** Animated live scorecard: rows slide to their new position when the ranking changes, numbers flash when points change. */
-export default function LiveScorecard({ title, state, mode, theme = 'blue', width = 560 }) {
+export default function LiveScorecard({ title, state, mode, theme = 'blue', width = 560, onEliminate, rowH, hideInfo }) {
+  const ROW = rowH || ROW_DEFAULT
+  const cb = useRef(onEliminate)
+  cb.current = onEliminate
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
   const rows = computeRows(state, mode)
   const prev = useRef({})            // id -> { rank, tp, kills }
@@ -15,11 +18,12 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
   useEffect(() => {
     const next = {}
     const changes = {}
+    const outs = []
     rows.forEach((r) => {
       const p = prev.current[r.id]
       if (p && !first.current) {
         const c = {}
-        if (p.alive && !r.alive) c.elim = true
+        if (p.alive && !r.alive) { c.elim = true; outs.push(r) }
         if (r.tp !== p.tp) c.pts = true
         if (r.kills !== p.kills) c.kills = true
         if (r.rank < p.rank) c.up = true
@@ -32,6 +36,7 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
     first.current = false
     if (Object.keys(changes).length) {
       setFx((o) => ({ ...o, ...changes }))
+      outs.forEach((r) => cb.current && cb.current({ id: r.id, name: r.name, tag: r.tag, logo: r.logo, country: r.country, placement: r.placement, kills: r.kills, points: r.tp }))
       const t = setTimeout(() => setFx((o) => { const n = { ...o }; Object.keys(changes).forEach((k) => { delete n[k] }); return n }), 3200)
       return () => clearTimeout(t)
     }
@@ -50,6 +55,15 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
         @keyframes lsElimShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
         .ls-shake{animation:lsElimShake .5s ease-in-out}
       `}</style>
+      {!hideInfo && (state?.info?.tournament || state?.info?.match || state?.info?.map || state?.info?.logo) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0a101c', borderBottom: `1px solid ${th.line}66`, padding: '8px 14px', borderRadius: '6px 6px 0 0' }}>
+          {state.info.logo && <img src={state.info.logo} alt="" style={{ height: 40, width: 40, objectFit: 'contain', flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 22, letterSpacing: '.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{state.info.tournament}</div>
+            <div style={{ fontSize: 15, letterSpacing: '.14em', color: th.line, textTransform: 'uppercase' }}>{[state.info.match && `Match ${state.info.match}`, state.info.map].filter(Boolean).join('  ·  ')}</div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: th.block, borderTop: `3px solid ${th.line}`, padding: '8px 14px', borderRadius: '6px 6px 0 0' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#d90429', borderRadius: 4, padding: '2px 8px', fontSize: 15, letterSpacing: '.1em' }}>
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', animation: 'lsPulse 1.2s infinite' }} />LIVE
@@ -91,6 +105,35 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
       </div>
       <div style={{ display: 'flex', gap: 16, background: '#0a101c', padding: '6px 14px', fontSize: 13, letterSpacing: '.1em', color: '#aab', borderRadius: '0 0 6px 6px' }}>
         {[['#22c55e', 'ALIVE'], ['#ef4444', 'KNOCKED'], ['#5b6270', 'ELIMINATED']].map(([c, l]) => <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, background: c, display: 'inline-block' }} />{l}</span>)}
+      </div>
+    </div>
+  )
+}
+
+/** Wide "eliminated stat" bar (top-centre of the broadcast layout), shown for a few seconds when a team is eliminated. */
+export function EliminationPopup({ item, theme = 'blue' }) {
+  const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
+  if (!item) return null
+  return (
+    <div style={{ position: 'absolute', left: 240, top: 110, width: 900, fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff', animation: 'lsPop 4s ease-in-out forwards', transformOrigin: 'top center' }}>
+      <style>{`@keyframes lsPop{0%{transform:translateY(-40px) scaleY(.2);opacity:0}9%{transform:translateY(0) scaleY(1.06);opacity:1}14%{transform:scaleY(1)}86%{transform:scaleY(1);opacity:1}100%{transform:translateY(-30px) scaleY(.6);opacity:0}}`}</style>
+      <div style={{ display: 'flex', alignItems: 'stretch', background: '#0a101c', border: `2px solid ${th.line}`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.6)' }}>
+        <div style={{ background: 'linear-gradient(180deg,#d90429,#7f0a0a)', padding: '0 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: 150 }}>
+          <span style={{ fontSize: 16, letterSpacing: '.22em' }}>ELIMINATED</span>
+          <span style={{ fontSize: 54, lineHeight: 1 }}>#{item.placement}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', flex: 1, minWidth: 0 }}>
+          <span style={{ width: 84, height: 84, borderRadius: '50%', background: '#fff', border: `3px solid ${th.line}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+            {item.logo ? <img src={item.logo} alt="" style={{ width: '88%', height: '88%', objectFit: 'contain' }} /> : <span style={{ color: '#111', fontSize: 30 }}>{String(item.tag || item.name).slice(0, 2)}</span>}
+          </span>
+          <div style={{ fontSize: 42, letterSpacing: '.05em', textTransform: 'uppercase', lineHeight: 1.05, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
+        </div>
+        {[['KILLS', item.kills], ['POINTS', item.points]].map(([l, v]) => (
+          <div key={l} style={{ textAlign: 'center', background: '#101a2c', borderLeft: `2px solid ${th.line}55`, padding: '10px 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 110 }}>
+            <span style={{ fontSize: 15, letterSpacing: '.2em', color: '#aab' }}>{l}</span>
+            <span style={{ fontSize: 52, lineHeight: 1 }}>{v}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
