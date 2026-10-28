@@ -3,6 +3,7 @@ import { Radio, Copy, Undo2, RotateCcw, Square, Minus, Plus, Play } from 'lucide
 import { supabase } from '../../lib/supabase'
 import { useData } from '../../lib/hooks'
 import { Card, ErrorBox, Field, Notice, Spinner } from '../../components/ui'
+import ImageField from '../../components/ImageField'
 import LiveScorecard from '../../components/LiveScorecard'
 import { computeRows, LIVE_THEMES } from '../../lib/live'
 import { placementPoints } from '../../lib/points'
@@ -16,7 +17,7 @@ const linkOf = (id, theme) => `${window.location.origin}${window.location.pathna
  * End = the live data is deleted from the broadcast, the match result is saved into the tournament Results.
  */
 export default function BroadcastAdmin() {
-  const tours = useData(() => supabase.from('tournaments').select('id, title').order('start_date', { ascending: false }))
+  const tours = useData(() => supabase.from('tournaments').select('id, title, logo_url').order('start_date', { ascending: false }))
   const sessions = useData(() => supabase.from('tbroadcast_sessions').select('*').eq('status', 'live').order('created_at', { ascending: false }))
   const [openId, setOpenId] = useState(null)
   const [msg, setMsg] = useState('')
@@ -76,9 +77,11 @@ function NewSession({ tours, onCreated }) {
     const slotOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.slot || 99]))
     const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] }))
     if (!teams.length) { setBusy(false); return setErr('This group has no teams yet.') }
-    const ttl = tours.find((t) => t.id === tid)?.title
+    const tr0 = tours.find((t) => t.id === tid)
+    const ttl = tr0?.title
+    const mc = await supabase.from('tournament_matches').select('number').eq('group_id', group.id).order('number', { ascending: false }).limit(1)
     const { data, error } = await supabase.from('tbroadcast_sessions').insert({
-      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name },
+      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name, info: { tournament: ttl || '', logo: tr0?.logo_url || '', match: String((mc.data?.[0]?.number || 0) + 1), map: '' } },
     }).select('id').single()
     setBusy(false)
     if (error) return setErr(/tbroadcast_sessions|schema cache/i.test(error.message) ? 'Run supabase/broadcast.sql once in Supabase (SQL Editor), then try again.' : error.message)
@@ -114,6 +117,24 @@ function EnterNum({ value, onCommit, className = '', ...rest }) {
     onChange={(e) => setD(e.target.value)}
     onKeyDown={(e) => { if (e.key === 'Enter') { onCommit(d ?? shown); setD(null); e.target.blur() } if (e.key === 'Escape') { setD(null); e.target.blur() } }}
     onBlur={() => setD(null)} title="Type, then press Enter to send to the live scoreboard" />
+}
+
+/** Match overlay: tournament name + logo, match number, map. Sent to the live scoreboard when you press Apply. */
+function InfoEditor({ info, onApply }) {
+  const [d, setD] = useState({ tournament: '', logo: '', match: '', map: '', ...info })
+  const dirty = JSON.stringify({ tournament: '', logo: '', match: '', map: '', ...info }) !== JSON.stringify(d)
+  return (
+    <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Match overlay (shown above the scorecard)</div>
+      <div className="grid gap-3 md:grid-cols-[1fr_110px_1fr_200px]">
+        <Field label="Tournament name"><input className="input" value={d.tournament} onChange={(e) => setD({ ...d, tournament: e.target.value })} /></Field>
+        <Field label="Match no."><input className="input" value={d.match} onChange={(e) => setD({ ...d, match: e.target.value })} /></Field>
+        <Field label="Map name"><input className="input" list="bc-maps" value={d.map} onChange={(e) => setD({ ...d, map: e.target.value })} placeholder="Erangel" /><datalist id="bc-maps">{['Erangel', 'Miramar', 'Rondo', 'Sanhok', 'Vikendi', 'Livik', 'Karakin'].map((m) => <option key={m} value={m} />)}</datalist></Field>
+        <ImageField label="Tournament logo" folder="tournament" value={d.logo || null} onChange={(v) => setD({ ...d, logo: v || '' })} />
+      </div>
+      <button className={`mt-2 ${dirty ? 'btn-primary' : 'btn-ghost'} btn-sm`} disabled={!dirty} onClick={() => onApply(d)}>{dirty ? 'Apply to live scoreboard' : 'Applied ✓'}</button>
+    </div>
+  )
 }
 
 function Control({ session, onClose, onEnded }) {
@@ -218,6 +239,7 @@ function Control({ session, onClose, onEnded }) {
         <button className="btn-primary btn-sm !bg-red-700" disabled={busy} onClick={end}><Square size={13} /> End broadcast</button>
       </div>
       <ErrorBox>{err}</ErrorBox>
+      <InfoEditor info={st.info || {}} onApply={(info) => update((o) => ({ ...o, info }))} />
       <div className="grid gap-4 xl:grid-cols-[1fr_580px]">
         <div className="rounded-xl border border-ink-700">
           <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-950 px-3 py-2 text-xs text-slate-400">
