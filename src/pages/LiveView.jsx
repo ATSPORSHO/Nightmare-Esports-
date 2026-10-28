@@ -48,15 +48,11 @@ export default function LiveView() {
   const theme = params.get('theme') || data.theme
   const info = data.state?.info || {}
   const n = (data.state?.teams || []).length || 1
-  const SB_TOP = 190, SB_H = 1080 - 20 - SB_TOP
+  const SB_TOP = 20, SB_H = 1080 - 20 - SB_TOP
   const rowH = Math.max(26, Math.min(46, Math.floor((SB_H - 104) / n)))
   const font = "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif"
   return (
     <div style={{ position: 'absolute', left: 0, top: 0, width: 1920, height: 1080, transformOrigin: 'top left', transform: `scale(${scale})`, overflow: 'hidden', fontFamily: font, color: '#fff' }}>
-      {/* top-right: tournament logo */}
-      <div style={{ position: 'absolute', right: 20, top: 20, width: 160, height: 160, background: '#0a101c', border: '2px solid rgba(255,255,255,.12)', borderRadius: 8, display: info.logo ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
-        {info.logo && <img src={info.logo} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />}
-      </div>
       {/* right: live scoreboard */}
       <div style={{ position: 'absolute', right: 20, top: SB_TOP }}>
         <LiveScorecard title={data.title} state={data.state} mode={data.mode} theme={theme} width={540} rowH={rowH} hideInfo onEliminate={onElim} />
