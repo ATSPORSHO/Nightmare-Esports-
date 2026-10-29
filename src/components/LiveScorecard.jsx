@@ -78,7 +78,8 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
           const f = fx[r.id] || {}
           const fade = { opacity: r.alive || f.elim ? 1 : 0.3, filter: r.alive || f.elim ? 'none' : 'grayscale(1)', transition: 'opacity 1.4s ease 0.2s, filter 1.4s ease 0.2s' }
           return (
-            <div key={r.id} className={f.elim ? 'ls-shake' : f.pts ? 'ls-glow' : ''} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: ROW, transform: `translateY(${(r.rank - 1) * ROW}px)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1)', display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', padding: '0 14px 0 0', borderTop: '1px solid rgba(255,255,255,.08)', background: r.rank === 1 ? `linear-gradient(${th.line}40,${th.line}40), #101a2c` : r.rank % 2 ? '#101a2c' : '#0d1524', overflow: 'hidden' }}>
+            <div key={r.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: ROW, transform: `translateY(${(r.rank - 1) * ROW}px)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1)', borderTop: '1px solid rgba(255,255,255,.08)', background: r.rank === 1 ? `linear-gradient(${th.line}40,${th.line}40), #101a2c` : r.rank % 2 ? '#101a2c' : '#0d1524', overflow: 'hidden' }}>
+              <div className={f.elim ? 'ls-shake' : f.pts ? 'ls-glow' : ''} style={{ height: '100%', display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', padding: '0 14px 0 0' }}>
               {f.elim && <div style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(90deg,#7f0a0a,#d90429 50%,#7f0a0a)', animation: 'lsElim 3s ease-in-out forwards', fontSize: 26, letterSpacing: '.18em' }}>ELIMINATED<span style={{ background: '#fff', color: '#b00020', borderRadius: 4, padding: '0 8px' }}>#{r.placement}</span></div>}
               <div style={{ textAlign: 'center', fontSize: 24, color: r.rank <= 3 ? '#fff' : '#cfd3e0', position: 'relative' }}>
                 {r.rank}
@@ -98,6 +99,7 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
               </div>
               <div style={{ textAlign: 'center', fontSize: 24, ...fade }}><span className={f.kills ? 'ls-flash' : ''}>{r.kills}</span></div>
               <div style={{ textAlign: 'center', fontSize: 28, ...fade }}><span className={f.pts ? 'ls-flash' : ''}>{r.tp}</span></div>
+              </div>
             </div>
           )
         })}
@@ -110,11 +112,11 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
 }
 
 /** Wide "eliminated stat" bar (top-centre of the broadcast layout), shown for a few seconds when a team is eliminated. */
-export function EliminationPopup({ item, theme = 'blue' }) {
+export function EliminationPopup({ item, theme = 'blue', top = 80 }) {
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
   if (!item) return null
   return (
-    <div style={{ position: 'absolute', left: 240, top: 80, width: 900, fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff', animation: 'lsGlitch 3.6s linear forwards' }}>
+    <div style={{ position: 'absolute', left: 240, top, width: 900, fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff', animation: 'lsGlitch 3.6s linear forwards' }}>
       <style>{`
         @keyframes lsGlitch{
           0%{opacity:0;transform:translateX(0)}
@@ -151,6 +153,52 @@ export function EliminationPopup({ item, theme = 'blue' }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+const HELMET = { a: '#22b25a', k: '#e5384f', d: '#0b0b0b' }
+function Helmet({ c }) {
+  return (
+    <svg width="44" height="40" viewBox="0 0 44 40" style={{ transition: 'fill .4s' }}>
+      <path d="M3 24C3 11 11 3 23 3c11 0 18 8 18 19v5c0 2-1 3-3 3H29c-2 0-3-1-4-3l-1-2c-1-2-3-2-4 0l-2 3c-1 2-3 2-5 2H6c-2 0-3-1-3-3z" fill={HELMET[c] || HELMET.a} />
+      <path d="M14 15c2-4 6-6 10-6" stroke="#fff" strokeOpacity=".35" strokeWidth="2" fill="none" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** Share of the "winner winner chicken dinner" between the teams still alive, worked out from how many of their players are alive (knocked players count half). */
+export function wwcdShares(rows) {
+  const w = rows.map((r) => (r.pl && r.pl.length ? r.pl : ['a', 'a', 'a', 'a']).reduce((n, c) => n + (c === 'a' ? 1 : c === 'k' ? 0.5 : 0), 0))
+  const sum = w.reduce((a, b) => a + b, 0) || 1
+  return w.map((x) => (x / sum) * 100)
+}
+
+/** Final-4 strip (top-centre): flag, logo, four helmets (green alive / red knocked / black out), kills, WWCD %. */
+export function FinalFour({ rows, theme = 'blue' }) {
+  const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
+  const sh = wwcdShares(rows)
+  return (
+    <div style={{ display: 'flex', gap: 14, justifyContent: 'center', fontFamily: "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif", color: '#fff' }}>
+      {rows.map((r, i) => (
+        <div key={r.id} style={{ width: 330, background: '#0a101c', border: `2px solid ${th.line}`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 30px rgba(0,0,0,.55)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+            <Flag code={r.country} h="20px" />
+            <span style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: `2px solid ${th.line}` }}>
+              {r.logo ? <img src={r.logo} alt="" style={{ width: '86%', height: '86%', objectFit: 'contain' }} /> : <span style={{ color: '#111', fontSize: 16 }}>{String(r.tag || r.name).slice(0, 2)}</span>}
+            </span>
+            {!r.logo && <span style={{ fontSize: 20, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{r.tag || r.name}</span>}
+            <span style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>{[0, 1, 2, 3].map((k) => <Helmet key={k} c={(r.pl || [])[k] || 'a'} />)}</span>
+          </div>
+          <div style={{ background: th.block, display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 10, padding: '2px 0' }}>
+            <span style={{ fontSize: 14, letterSpacing: '.2em', opacity: 0.85 }}>KILLS</span>
+            <span style={{ fontSize: 32, lineHeight: 1.1 }}>{r.kills}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '4px 0 6px', fontSize: 24 }}>
+            <span style={{ letterSpacing: '.1em' }}>WWCD</span><span style={{ width: 2, height: 22, background: th.line }} /><span>{sh[i].toFixed(1)}%</span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
