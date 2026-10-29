@@ -74,17 +74,14 @@ function NewSession({ tours, onCreated }) {
     const gt = await supabase.from('tournament_group_teams').select('team_id, slot').eq('group_id', group.id)
     const ids = (gt.data || []).map((x) => x.team_id)
     const tm = ids.length ? await supabase.from('tournament_teams').select('*').in('id', ids) : { data: [] }
-    const pq = ids.length ? await supabase.from('tournament_team_players').select('id, team_id, name, photo_url').in('team_id', ids).order('sort') : { data: [] }
-    const playersOf = {}
-    ;(pq.data || []).forEach((p) => { (playersOf[p.team_id] ||= []).push({ key: p.id, id: p.id, name: p.name || '', photo: p.photo_url || '', kills: 0, total: 0 }) })
     const slotOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.slot || 99]))
-    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', photo: t.photo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: playersOf[t.id] || [] }))
+    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] }))
     if (!teams.length) { setBusy(false); return setErr('This group has no teams yet.') }
     const tr0 = tours.find((t) => t.id === tid)
     const ttl = tr0?.title
     const mc = await supabase.from('tournament_matches').select('number').eq('group_id', group.id).order('number', { ascending: false }).limit(1)
     const { data, error } = await supabase.from('tbroadcast_sessions').insert({
-      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name, scene: 'live', info: { tournament: ttl || '', logo: tr0?.logo_url || '', match: String((mc.data?.[0]?.number || 0) + 1), map: '' } },
+      tournament_id: tid, group_id: group.id, title: title.trim() || `${ttl} · ${group.name}`, mode, theme, state: { teams, history: [], group: group.name, info: { tournament: ttl || '', logo: tr0?.logo_url || '', match: String((mc.data?.[0]?.number || 0) + 1), map: '' } },
     }).select('id').single()
     setBusy(false)
     if (error) return setErr(/tbroadcast_sessions|schema cache/i.test(error.message) ? 'Run supabase/broadcast.sql once in Supabase (SQL Editor), then try again.' : error.message)
@@ -140,30 +137,6 @@ function InfoEditor({ info, onApply }) {
   )
 }
 
-const SCENES = [['starting', 'Starting soon'], ['teams', 'Participating teams'], ['live', 'Live match'], ['scoreboard', 'Live scoreboard'], ['h2h', 'Head to head'], ['mvp', 'MVP list']]
-
-function PlayersPanel({ team, onAdd, onEdit, onDel }) {
-  const [nm, setNm] = useState('')
-  return (
-    <div className="space-y-1 border-t border-ink-700/60 bg-ink-950 px-4 py-2">
-      {(team.players || []).map((p) => (
-        <div key={p.key} className="flex flex-wrap items-center gap-2 text-sm">
-          <input className="input !w-44 !py-0.5" defaultValue={p.name} onBlur={(e) => e.target.value.trim() !== p.name && onEdit(p.key, { name: e.target.value.trim() })} />
-          <button className="btn-ghost btn-sm !px-2" onClick={() => onEdit(p.key, { kills: Math.max(0, (Number(p.kills) || 0) - 1) })}><Minus size={12} /></button>
-          <span className="w-8 text-center font-display text-lg font-extrabold text-white">{Number(p.kills) || 0}</span>
-          <button className="btn-primary btn-sm !px-2" onClick={() => onEdit(p.key, { kills: (Number(p.kills) || 0) + 1 })}><Plus size={12} /> kill</button>
-          {(Number(p.total) || 0) > 0 && <span className="text-[11px] text-slate-500">earlier matches: {p.total}</span>}
-          <button className="ml-auto text-xs text-red-300" onClick={() => onDel(p.key)}>remove</button>
-        </div>
-      ))}
-      <div className="flex gap-2 pt-1">
-        <input className="input !w-44 !py-0.5" placeholder="Add player name" value={nm} onChange={(e) => setNm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { onAdd(nm); setNm('') } }} />
-        <button className="btn-ghost btn-sm" onClick={() => { onAdd(nm); setNm('') }}>Add</button>
-      </div>
-    </div>
-  )
-}
-
 function Control({ session, onClose, onEnded }) {
   const [st, setSt] = useState(session.state || { teams: [], history: [] })
   const [mode, setMode] = useState(session.mode)
@@ -191,12 +164,6 @@ function Control({ session, onClose, onEnded }) {
 
   const alive = st.teams.filter((t) => t.placement == null || t.placement === '').length
   const patch = (id, p) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, ...p } : t)) }))
-  const setPlayers = (tid, fn) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === tid ? { ...t, players: fn(t.players || []) } : t)) }))
-  const addPlayer = (tid, name) => name.trim() && setPlayers(tid, (L) => [...L, { key: `g${Date.now()}${L.length}`, id: null, name: name.trim(), kills: 0, total: 0 }])
-  const editPlayer = (tid, key, patch) => setPlayers(tid, (L) => L.map((p) => (p.key === key ? { ...p, ...patch } : p)))
-  const delPlayer = (tid, key) => setPlayers(tid, (L) => L.filter((p) => p.key !== key))
-  const scene = st.scene || 'live'
-  const setScene = (k) => update((o) => ({ ...o, scene: k }))
   const kill = (id, d) => patch(id, { kills: Math.max(0, (Number(st.teams.find((t) => t.id === id).kills) || 0) + d) })
   const [pend, setPend] = useState(null) // { id, value } — rank typed when eliminating
   const eliminate = (id, rank) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, placement: Number(rank) || alive, pl: ['d', 'd', 'd', 'd'] } : t)), history: [...(o.history || []), id] }))
@@ -204,14 +171,12 @@ function Control({ session, onClose, onEnded }) {
     const h = [...(o.history || [])]; const last = h.pop()
     return last ? { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null, pl: ['a', 'a', 'a', 'a'] } : t)) } : o
   })
-  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, kills: 0 })) })) })) }
+  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] })) })) }
   const setMd = (m) => { setMode(m); push() }
   const setTh = (t) => { setTheme(t); push() }
   const link = linkOf(session.id, theme)
 
   const [note, setNote] = useState('')
-  const warnRef = useRef('')
-  const [openT, setOpenT] = useState(null)
   const active = st.teams.some((t) => (Number(t.kills) || 0) > 0 || !(t.placement == null || t.placement === ''))
 
   /** write this match into the tournament Results (so the A4 reports show it) and refresh the group totals */
@@ -231,10 +196,6 @@ function Control({ session, onClose, onEnded }) {
     const ins = await supabase.from('tournament_match_results').insert(teams.map((t) => ({ match_id: m.data.id, team_id: t.id, placement: Number(t.placement), kills: t.kills })))
     if (ins.error) { await supabase.from('tournament_matches').delete().eq('id', m.data.id); throw ins.error }
 
-    // player kills (kept apart from the scoreboard) feed the MVP list of the A4 report
-    const prow = st.teams.flatMap((t) => (t.players || []).filter((p) => p.id && (Number(p.kills) || 0) > 0).map((p) => ({ match_id: m.data.id, team_id: t.id, player_id: p.id, kills: Number(p.kills) })))
-    warnRef.current = ''
-    if (prow.length) { const ip = await supabase.from('tmatch_player_stats').insert(prow); if (ip.error) warnRef.current = ` (Player kills could not be saved for the MVP report: ${ip.error.message} — run supabase/match-players.sql once.)` }
     const ms = await supabase.from('tournament_matches').select('id').eq('group_id', session.group_id)
     const ids = (ms.data || []).map((x) => x.id)
     const rs = await supabase.from('tournament_match_results').select('*').in('match_id', ids)
@@ -257,7 +218,7 @@ function Control({ session, onClose, onEnded }) {
     return number
   }
 
-  const blank = (o, nextMatch) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, total: (Number(p.total) || 0) + (Number(p.kills) || 0), kills: 0 })) })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
+  const blank = (o, nextMatch) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'] })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
 
   /** save this match to Results, then clear the scoreboard ready for the next match (broadcast stays live) */
   const upload = async () => {
@@ -267,7 +228,7 @@ function Control({ session, onClose, onEnded }) {
     try {
       const n = await saveResult()
       update((o) => blank(o, n + 1))
-      setNote(`Match ${n} uploaded to Results. The A4 report now includes it, and the scoreboard is reset for match ${n + 1}.${warnRef.current}`)
+      setNote(`Match ${n} uploaded to Results. The A4 report now includes it, and the scoreboard is reset for match ${n + 1}.`)
     } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
   }
@@ -303,20 +264,6 @@ function Control({ session, onClose, onEnded }) {
       </div>
       <ErrorBox>{err}</ErrorBox>
       {note && <Notice>{note}</Notice>}
-      <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Scene on air</div>
-        <div className="flex flex-wrap gap-2">
-          {SCENES.map(([k, l], i) => <button key={k} onClick={() => setScene(k)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${scene === k ? 'border-red-500 bg-red-600 text-white' : 'border-ink-600 text-slate-300 hover:bg-ink-700'}`}>{i + 1}. {l}{scene === k ? ' ● ON AIR' : ''}</button>)}
-        </div>
-        {scene === 'h2h' && (
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {['a', 'b'].map((side) => (
-              <Field key={side} label={`Team ${side.toUpperCase()}`}><select className="input" value={st.h2h?.[side] || ''} onChange={(e) => update((o) => ({ ...o, h2h: { ...(o.h2h || {}), [side]: e.target.value } }))}><option value="">— choose —</option>{st.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-            ))}
-          </div>
-        )}
-        <p className="mt-2 text-[11px] text-slate-500">Open <b>Players</b> on a team below to add names and count player kills. Player kills never change the live scoreboard — they only feed Head to head and the MVP list (and the MVP report when you upload the result).</p>
-      </div>
       <InfoEditor key={JSON.stringify(st.info || {})} info={st.info || {}} onApply={(info) => update((o) => ({ ...o, info }))} />
       <div className="grid gap-4 xl:grid-cols-[1fr_580px]">
         <div className="rounded-xl border border-ink-700">
@@ -332,8 +279,7 @@ function Control({ session, onClose, onEnded }) {
             {st.teams.map((t) => {
               const isAlive = t.placement == null || t.placement === ''
               return (
-                <div key={t.id}>
-                <div className={`flex flex-wrap items-center gap-2 px-3 py-1.5 text-sm ${isAlive ? '' : 'opacity-60'}`}>
+                <div key={t.id} className={`flex flex-wrap items-center gap-2 px-3 py-1.5 text-sm ${isAlive ? '' : 'opacity-60'}`}>
                   <span className="flex min-w-[130px] flex-1 items-center gap-2">
                     {t.logo ? <img src={t.logo} alt="" className="h-6 w-6 rounded-full bg-white object-contain" /> : <span className="h-6 w-6 rounded-full bg-ink-700" />}
                     <span className="truncate font-medium text-white">{t.tag || t.name}</span>
@@ -358,9 +304,6 @@ function Control({ session, onClose, onEnded }) {
                   )}
                   {isAlive && <span className="flex gap-0.5" title="Players: click to change alive → knocked → out">{[0, 1, 2, 3].map((i) => { const c = (t.pl || [])[i] || 'a'; return <button key={i} type="button" onClick={() => patch(t.id, { pl: [0, 1, 2, 3].map((j) => (j === i ? { a: 'k', k: 'd', d: 'a' }[c] : (t.pl || [])[j] || 'a')) })} className="h-5 w-2.5 rounded-sm" style={{ background: c === 'a' ? '#22c55e' : c === 'k' ? '#ef4444' : '#5b6270' }} /> })}</span>}
                   <span className="w-10 text-right font-display text-lg font-extrabold text-amber-300" title="Points">{rows.find((r) => r.id === t.id)?.tp}</span>
-                  <button className={`btn-ghost btn-sm !px-2 ${openT === t.id ? '!bg-ink-700' : ''}`} onClick={() => setOpenT(openT === t.id ? null : t.id)} title="Player names and player kills">Players ({(t.players || []).length})</button>
-                </div>
-                {openT === t.id && <PlayersPanel team={t} onAdd={(n) => addPlayer(t.id, n)} onEdit={(k, p) => editPlayer(t.id, k, p)} onDel={(k) => delPlayer(t.id, k)} />}
                 </div>
               )
             })}

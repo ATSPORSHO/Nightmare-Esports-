@@ -24,14 +24,3 @@ export const LIVE_THEMES = {
   blue: { name: 'Blue', line: '#2d66dc', block: '#0f3f9e' },
   red: { name: 'Red', line: '#e23b3b', block: '#a31212' },
 }
-
-/** Player kills are kept apart from team kills (they never change the live scoreboard): `kills` = this match, `total` = earlier matches of this broadcast. */
-export const playerTotal = (p) => (Number(p.total) || 0) + (Number(p.kills) || 0)
-
-/** MVP list: every named player, most kills first. */
-export function mvpList(state) {
-  const out = []
-  ;(state?.teams || []).forEach((t) => (t.players || []).forEach((p) => { if (p.name) out.push({ key: `${t.id}:${p.key}`, name: p.name, photo: p.photo || '', team: t, kills: Number(p.kills) || 0, total: playerTotal(p) }) }))
-  out.sort((a, b) => b.total - a.total || b.kills - a.kills || a.name.localeCompare(b.name))
-  return out.map((p, i) => ({ ...p, rank: i + 1 }))
-}

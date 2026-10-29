@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LiveScorecard, { EliminationPopup, FinalFour } from '../components/LiveScorecard'
 import { LIVE_THEMES, computeRows } from '../lib/live'
-import { StartingScene, TeamsScene, H2HScene, MvpScene, StandingsScene, stageBg } from '../components/LiveScenes'
 
 /** Public live page (no menu). Use this link as a Browser Source in OBS, or open it in any browser. ?theme=green|blue|red  ?bg=dark */
 export default function LiveView() {
@@ -57,12 +56,8 @@ export default function LiveView() {
   const final4 = allRows.length > 4 && aliveRows.length > 0 && aliveRows.length <= 4
   if (final4) lastFinal.current = aliveRows
   const font = "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif"
-  const scene = data.state?.scene || 'live'
-  const th0 = LIVE_THEMES[theme] || LIVE_THEMES.blue
-  const layer = (on, bg) => ({ position: 'absolute', inset: 0, background: bg ? stageBg(th0) : 'transparent', opacity: on ? 1 : 0, transform: on ? 'none' : 'scale(1.04)', visibility: on ? 'visible' : 'hidden', transition: `opacity .6s ease, transform .6s ease, visibility 0s linear ${on ? '0s' : '.6s'}`, pointerEvents: 'none' })
   return (
     <div style={{ position: 'absolute', left: 0, top: 0, width: 1920, height: 1080, transformOrigin: 'top left', transform: `scale(${scale})`, overflow: 'hidden', fontFamily: font, color: '#fff' }}>
-      <div style={layer(scene === 'live', false)}>
       {/* right: live scoreboard */}
       <div style={{ position: 'absolute', right: 20, top: SB_TOP, transform: final4 ? 'translateX(135%)' : 'none', transition: 'transform .9s cubic-bezier(.65,0,.35,1)' }}>
         <LiveScorecard title={data.title} state={data.state} mode={data.mode} theme={theme} width={540} rowH={rowH} hideInfo onEliminate={onElim} />
@@ -83,12 +78,6 @@ export default function LiveView() {
       </div>
       {/* eliminated stat */}
       <EliminationPopup key={pop?.k} item={pop} theme={theme} top={final4 ? 200 : 80} />
-      </div>
-      <div style={layer(scene === 'starting', true)}><StartingScene info={info} theme={theme} /></div>
-      <div style={layer(scene === 'teams', true)}><TeamsScene teams={data.state?.teams || []} info={info} theme={theme} /></div>
-      <div style={layer(scene === 'scoreboard', false)}><StandingsScene state={data.state} mode={data.mode} theme={theme} title={data.title} /></div>
-      <div style={layer(scene === 'h2h', false)}><H2HScene state={data.state} mode={data.mode} theme={theme} /></div>
-      <div style={layer(scene === 'mvp', false)}><MvpScene state={data.state} theme={theme} /></div>
     </div>
   )
 }
