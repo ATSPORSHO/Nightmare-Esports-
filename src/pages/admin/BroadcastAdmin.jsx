@@ -5,7 +5,7 @@ import { useData } from '../../lib/hooks'
 import { Card, ErrorBox, Field, Notice, Spinner } from '../../components/ui'
 import ImageField from '../../components/ImageField'
 import LiveScorecard from '../../components/LiveScorecard'
-import { computeRows, LIVE_THEMES } from '../../lib/live'
+import { computeRows, LIVE_THEMES, WWCD_THEMES } from '../../lib/live'
 import { placementPoints } from '../../lib/points'
 
 const linkOf = (id, theme) => `${window.location.origin}${window.location.pathname}#/live/${id}${theme ? `?theme=${theme}` : ''}`
@@ -71,14 +71,16 @@ function NewSession({ tours, onCreated }) {
     setErr('')
     if (!tid || !group) return setErr('Choose the tournament and the group first.')
     setBusy(true)
-    const gt = await supabase.from('tournament_group_teams').select('team_id, slot').eq('group_id', group.id)
+    const gt0 = await supabase.from('tournament_group_teams').select('team_id, slot, place_pts, kill_pts, wwcd, mp').eq('group_id', group.id)
+    const gt = { data: (gt0.data || []).map((x) => ({ ...x, base: { pp: Number(x.place_pts) || 0, kills: Number(x.kill_pts) || 0, wwcd: Number(x.wwcd) || 0, mp: Number(x.mp) || 0 } })) }
     const ids = (gt.data || []).map((x) => x.team_id)
     const tm = ids.length ? await supabase.from('tournament_teams').select('*').in('id', ids) : { data: [] }
     const pq = ids.length ? await supabase.from('tournament_team_players').select('id, team_id, name, photo_url').in('team_id', ids).order('sort') : { data: [] }
     const playersOf = {}
     ;(pq.data || []).forEach((p) => { (playersOf[p.team_id] ||= []).push({ key: p.id, id: p.id, name: p.name || '', photo: p.photo_url || '', kills: 0, total: 0 }) })
+    const baseOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.base]))
     const slotOf = Object.fromEntries((gt.data || []).map((x) => [x.team_id, x.slot || 99]))
-    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', photo: t.photo_url || '', country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: playersOf[t.id] || [] }))
+    const teams = (tm.data || []).sort((a, b) => slotOf[a.id] - slotOf[b.id]).map((t) => ({ id: t.id, name: t.name, tag: t.tag || '', logo: t.logo_url || '', photo: t.photo_url || '', base: baseOf[t.id] || { pp: 0, kills: 0, wwcd: 0, mp: 0 }, country: t.country || '', kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: playersOf[t.id] || [] }))
     if (!teams.length) { setBusy(false); return setErr('This group has no teams yet.') }
     const tr0 = tours.find((t) => t.id === tid)
     const ttl = tr0?.title
@@ -140,6 +142,19 @@ function InfoEditor({ info, onApply }) {
   )
 }
 
+const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+
+/** "Starting soon" countdown: pick the match start time (or press +5 / +10 / +15 / +30 min). */
+function Countdown({ startAt, onSet }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-ink-700 bg-ink-950 p-2">
+      <Field label="Match starts at (countdown on “Starting soon”)"><input type="datetime-local" className="input" value={toLocalInput(startAt)} onChange={(e) => onSet(e.target.value ? new Date(e.target.value).toISOString() : '')} /></Field>
+      {[5, 10, 15, 30].map((m) => <button key={m} className="btn-ghost btn-sm" onClick={() => onSet(new Date(Date.now() + m * 60000).toISOString())}>+{m} min</button>)}
+      {startAt && <button className="btn-ghost btn-sm text-red-300" onClick={() => onSet('')}>Clear</button>}
+    </div>
+  )
+}
+
 const SCENES = [['starting', 'Starting soon'], ['teams', 'Participating teams'], ['live', 'Live match'], ['scoreboard', 'Live scoreboard'], ['h2h', 'Head to head'], ['mvp', 'MVP list']]
 
 function PlayersPanel({ team, onAdd, onEdit, onDel }) {
@@ -177,17 +192,19 @@ function Control({ session, onClose, onEnded }) {
 
   // push every change to the live link (small delay so fast clicks are sent together)
   const dirty = useRef(false)
-  const push = () => {
+  const [sync, setSync] = useState('ok') // ok | sending | error
+  const push = (delay = 250) => {
     dirty.current = true
+    setSync('sending')
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       const { st: s, mode: m, theme: t } = latest.current
       const { error } = await supabase.from('tbroadcast_sessions').update({ state: s, mode: m, theme: t, updated_at: new Date().toISOString() }).eq('id', session.id)
-      if (error) setErr(error.message); else { setErr(''); dirty.current = false }
-    }, 250)
+      if (error) { setErr(error.message); setSync('error') } else { setErr(''); dirty.current = false; setSync('ok') }
+    }, delay)
   }
   useEffect(() => () => clearTimeout(timer.current), [])
-  const update = (fn) => { setSt((o) => fn(o)); push() }
+  const update = (fn, delay) => { setSt((o) => fn(o)); push(delay) }
 
   const alive = st.teams.filter((t) => t.placement == null || t.placement === '').length
   const patch = (id, p) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, ...p } : t)) }))
@@ -196,21 +213,27 @@ function Control({ session, onClose, onEnded }) {
   const editPlayer = (tid, key, patch) => setPlayers(tid, (L) => L.map((p) => (p.key === key ? { ...p, ...patch } : p)))
   const delPlayer = (tid, key) => setPlayers(tid, (L) => L.filter((p) => p.key !== key))
   const scene = st.scene || 'live'
-  const setScene = (k) => update((o) => ({ ...o, scene: k }))
+  const setScene = (k) => update((o) => ({ ...o, scene: k }), 30)   // scene changes go out immediately
+  const wwcdOn = (o) => ({ ...o, wwcd: { on: true, key: Date.now() } })
+  const wwcdOff = (o) => ({ ...o, wwcd: { on: false, key: o.wwcd?.key } })
   const kill = (id, d) => patch(id, { kills: Math.max(0, (Number(st.teams.find((t) => t.id === id).kills) || 0) + d) })
   const [pend, setPend] = useState(null) // { id, value } — rank typed when eliminating
-  const eliminate = (id, rank) => update((o) => ({ ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, placement: Number(rank) || alive, pl: ['d', 'd', 'd', 'd'] } : t)), history: [...(o.history || []), id] }))
+  const eliminate = (id, rank) => update((o0) => { const o = Number(rank) === 2 && o0.wwcdAuto !== false ? wwcdOn(o0) : o0; return { ...o, teams: o.teams.map((t) => (t.id === id ? { ...t, placement: Number(rank) || alive, pl: ['d', 'd', 'd', 'd'] } : t)), history: [...(o.history || []), id] } })
   const undo = () => update((o) => {
     const h = [...(o.history || [])]; const last = h.pop()
-    return last ? { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null, pl: ['a', 'a', 'a', 'a'] } : t)) } : o
+    if (!last) return o
+    const undone = o.teams.find((t) => t.id === last)
+    const base = { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null, pl: ['a', 'a', 'a', 'a'] } : t)) }
+    return Number(undone?.placement) === 2 ? wwcdOff(base) : base
   })
-  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, kills: 0 })) })) })) }
+  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => wwcdOff({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, kills: 0 })) })) })) }
   const setMd = (m) => { setMode(m); push() }
   const setTh = (t) => { setTheme(t); push() }
   const link = linkOf(session.id, theme)
 
   const [note, setNote] = useState('')
   const warnRef = useRef('')
+  const baseRef = useRef({}) // team id -> running totals after the last upload (kept when the scoreboard is reset)
   const [openT, setOpenT] = useState(null)
   const active = st.teams.some((t) => (Number(t.kills) || 0) > 0 || !(t.placement == null || t.placement === ''))
 
@@ -235,6 +258,7 @@ function Control({ session, onClose, onEnded }) {
     const prow = st.teams.flatMap((t) => (t.players || []).filter((p) => p.id && (Number(p.kills) || 0) > 0).map((p) => ({ match_id: m.data.id, team_id: t.id, player_id: p.id, kills: Number(p.kills) })))
     warnRef.current = ''
     if (prow.length) { const ip = await supabase.from('tmatch_player_stats').insert(prow); if (ip.error) warnRef.current = ` (Player kills could not be saved for the MVP report: ${ip.error.message} — run supabase/match-players.sql once.)` }
+    baseRef.current = {}
     const ms = await supabase.from('tournament_matches').select('id').eq('group_id', session.group_id)
     const ids = (ms.data || []).map((x) => x.id)
     const rs = await supabase.from('tournament_match_results').select('*').in('match_id', ids)
@@ -251,13 +275,14 @@ function Control({ session, onClose, onEnded }) {
     const ups = await Promise.all((fresh.data || []).map((x) => {
       const a = { ...(agg[x.team_id] || { mp: 0, wwcd: 0, place_pts: 0, kill_pts: 0 }) }
       a.wwcd += Number(x.cd_extra) || 0
+      baseRef.current[x.team_id] = { pp: a.place_pts, kills: a.kill_pts, wwcd: a.wwcd, mp: a.mp }
       return supabase.from('tournament_group_teams').update(a).eq('id', x.id)
     }))
     if (ups.find((u) => u.error)) throw ups.find((u) => u.error).error
     return number
   }
 
-  const blank = (o, nextMatch) => ({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, total: (Number(p.total) || 0) + (Number(p.kills) || 0), kills: 0 })) })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
+  const blank = (o, nextMatch) => wwcdOff({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, base: baseRef.current[t.id] || t.base, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, total: (Number(p.total) || 0) + (Number(p.kills) || 0), kills: 0 })) })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
 
   /** save this match to Results, then clear the scoreboard ready for the next match (broadcast stays live) */
   const upload = async () => {
@@ -304,14 +329,38 @@ function Control({ session, onClose, onEnded }) {
       <ErrorBox>{err}</ErrorBox>
       {note && <Notice>{note}</Notice>}
       <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Scene on air</div>
+        <div className="mb-2 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Scene on air <span className={`rounded px-1.5 py-0.5 text-[10px] normal-case tracking-normal ${sync === 'ok' ? 'bg-emerald-900/50 text-emerald-300' : sync === 'error' ? 'bg-red-900/60 text-red-300' : 'bg-amber-900/50 text-amber-300'}`}>{sync === 'ok' ? '✓ sent to the live link' : sync === 'error' ? '✗ not sent — check the message above' : 'sending…'}</span></div>
         <div className="flex flex-wrap gap-2">
           {SCENES.map(([k, l], i) => <button key={k} onClick={() => setScene(k)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${scene === k ? 'border-red-500 bg-red-600 text-white' : 'border-ink-600 text-slate-300 hover:bg-ink-700'}`}>{i + 1}. {l}{scene === k ? ' ● ON AIR' : ''}</button>)}
         </div>
+        <Countdown startAt={st.info?.startAt} onSet={(iso) => update((o) => ({ ...o, info: { ...(o.info || {}), startAt: iso || '' } }), 30)} />
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          <span className="font-semibold uppercase tracking-wider">Live scoreboard shows</span>
+          {[['match', 'This match only'], ['overall', 'Full tournament (past matches + this match)']].map(([k, l]) => <button key={k} onClick={() => update((o) => ({ ...o, board: k }), 30)} className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${(st.board || 'match') === k ? 'border-accent bg-accent text-white' : 'border-ink-600 text-slate-300 hover:bg-ink-700'}`}>{l}</button>)}
+        </div>
+        <div className="mt-3 rounded-lg border border-ink-700 bg-ink-950 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-slate-400">🍗 WWCD video (loops on screen)</span>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${st.wwcd?.on ? 'bg-red-600 text-white' : 'bg-ink-700 text-slate-400'}`}>{st.wwcd?.on ? '● PLAYING' : 'off'}</span>
+            <button className="btn-primary btn-sm" onClick={() => update(wwcdOn, 30)}>▶ Play</button>
+            <button className="btn-ghost btn-sm" onClick={() => update(wwcdOff, 30)}>■ Stop</button>
+            <label className="ml-2 flex items-center gap-1 text-slate-300"><input type="checkbox" checked={st.wwcdAuto !== false} onChange={(e) => update((o) => ({ ...o, wwcdAuto: e.target.checked }), 30)} /> Play automatically when a team is eliminated at 2nd place</label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className="font-semibold uppercase tracking-wider">Background theme</span>
+            {Object.entries(WWCD_THEMES).map(([k, v]) => <button key={k} onClick={() => update((o) => ({ ...o, wwcdTheme: k }), 30)} className={`rounded-lg border px-3 py-1 text-sm font-semibold ${(st.wwcdTheme || 'blue') === k ? 'border-accent bg-accent text-white' : 'border-ink-600 text-slate-300 hover:bg-ink-700'}`}>{v.name}</button>)}
+          </div>
+        </div>
+        {st.teams.length > 8 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className="font-semibold uppercase tracking-wider">Scoreboard page (8 teams per page, like the A4 report)</span>
+            {['auto', ...Array.from({ length: Math.ceil(st.teams.length / 8) }, (_, i) => i)].map((k) => <button key={k} onClick={() => update((o) => ({ ...o, boardPage: k }), 30)} className={`rounded-lg border px-3 py-1 text-sm font-semibold ${String(st.boardPage ?? 'auto') === String(k) ? 'border-accent bg-accent text-white' : 'border-ink-600 text-slate-300 hover:bg-ink-700'}`}>{k === 'auto' ? 'Auto flip' : `Page ${k + 1}`}</button>)}
+          </div>
+        )}
         {scene === 'h2h' && (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {['a', 'b'].map((side) => (
-              <Field key={side} label={`Team ${side.toUpperCase()}`}><select className="input" value={st.h2h?.[side] || ''} onChange={(e) => update((o) => ({ ...o, h2h: { ...(o.h2h || {}), [side]: e.target.value } }))}><option value="">— choose —</option>{st.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+              <Field key={side} label={`Team ${side.toUpperCase()}`}><select className="input" value={st.h2h?.[side] || ''} onChange={(e) => update((o) => ({ ...o, h2h: { ...(o.h2h || {}), [side]: e.target.value } }), 30)}><option value="">— choose —</option>{st.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
             ))}
           </div>
         )}
@@ -347,12 +396,12 @@ function Control({ session, onClose, onEnded }) {
                         ? (pend?.id === t.id
                           ? <span className="flex w-40 items-center gap-1"><span className="text-[10px] text-slate-400">Rank</span><input autoFocus className="input !w-12 !px-1 !py-0.5 text-center" type="number" min="1" max="25" value={pend.value} onChange={(e) => setPend({ id: t.id, value: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { eliminate(t.id, pend.value); setPend(null) } if (e.key === 'Escape') setPend(null) }} /><button className="btn-primary btn-sm !px-2 !bg-red-700" onClick={() => { eliminate(t.id, pend.value); setPend(null) }}>OK</button><button className="btn-ghost btn-sm !px-1" onClick={() => setPend(null)}>✕</button></span>
                           : <button className="btn-ghost btn-sm w-28 text-red-300" onClick={() => setPend({ id: t.id, value: alive })}>Eliminate</button>)
-                        : <span className="w-28 text-center text-xs font-bold text-red-400">OUT · #{t.placement}</span>}
+                        : <span className={`w-28 text-center text-xs font-bold ${Number(t.placement) === 1 ? 'text-amber-300' : 'text-red-400'}`}>{Number(t.placement) === 1 ? '🍗 WWCD · #1' : `OUT · #${t.placement}`}</span>}
                     </>
                   ) : (
                     <>
                       <label className="text-[10px] text-slate-500">Kills <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" min="0" value={t.kills ?? 0} onCommit={(v) => patch(t.id, { kills: Math.max(0, Number(v) || 0) })} /></label>
-                      <label className="text-[10px] text-slate-500">Place <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" min="1" max="25" placeholder="alive" value={t.placement ?? ''} onCommit={(v) => patch(t.id, { placement: v === '' ? null : Number(v), pl: v === '' ? undefined : ['d', 'd', 'd', 'd'] })} /></label>
+                      <label className="text-[10px] text-slate-500">Place <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" min="1" max="25" placeholder="alive" value={t.placement ?? ''} onCommit={(v) => { patch(t.id, { placement: v === '' ? null : Number(v), pl: v === '' ? undefined : ['d', 'd', 'd', 'd'] }); if (Number(v) === 2 && st.wwcdAuto !== false) update(wwcdOn, 30) }} /></label>
                       <label className="text-[10px] text-slate-500">± pts <EnterNum className="input !w-14 !px-1 !py-0.5 text-center" value={t.adj ?? 0} onCommit={(v) => patch(t.id, { adj: Number(v) || 0 })} /></label>
                     </>
                   )}
@@ -368,7 +417,7 @@ function Control({ session, onClose, onEnded }) {
         </div>
         <div className="rounded-xl border border-ink-700 bg-ink-950 p-3">
           <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Preview (what viewers see)</div>
-          <div className="overflow-x-auto"><LiveScorecard title={session.title} state={st} mode={mode} theme={theme} width={540} /></div>
+          <div className="overflow-x-auto"><LiveScorecard title={session.title} state={st} mode={mode} theme={theme} width={540} view={st.board || 'match'} /></div>
         </div>
       </div>
     </div>

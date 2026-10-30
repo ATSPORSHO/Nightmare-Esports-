@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { LIVE_THEMES, computeRows, mvpList, playerTotal } from '../lib/live'
 import Flag from './Flag'
 import bgGreen from '../assets/report/green.jpg'
@@ -23,19 +24,46 @@ const Title = ({ children, th, sub }) => (
 )
 const subOf = (info) => [info?.tournament, info?.match && `Match ${info.match}`, info?.map].filter(Boolean).join('  ·  ')
 
-/** 1. Starting soon */
+/** Ticking countdown to the match start. */
+function useNow() {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(t) }, [])
+  return now
+}
+
+/** 1. Starting soon — with a countdown to the match start time */
 export function StartingScene({ info = {}, theme }) {
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
+  const now = useNow()
+  const target = info.startAt ? new Date(info.startAt).getTime() : null
+  const left = target ? Math.max(0, Math.ceil((target - now) / 1000)) : null
+  const d = left != null ? Math.floor(left / 86400) : 0
+  const parts = left == null ? [] : [...(d > 0 ? [['DAYS', d]] : []), ['HOURS', Math.floor((left % 86400) / 3600)], ['MINUTES', Math.floor((left % 3600) / 60)], ['SECONDS', left % 60]]
+  const startTxt = target ? new Date(target).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 26, fontFamily: FONT, color: '#fff' }}>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, fontFamily: FONT, color: '#fff' }}>
       <style>{`@keyframes lsDot{0%,80%,100%{opacity:.2;transform:scale(.7)}40%{opacity:1;transform:scale(1.2)}}@keyframes lsBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}`}</style>
-      {info.logo && <img src={info.logo} alt="" style={{ height: 300, maxWidth: 520, objectFit: 'contain', animation: 'lsBreath 3.2s ease-in-out infinite' }} />}
-      <div style={{ fontSize: 92, letterSpacing: '.1em', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1 }}>{info.tournament || 'Tournament'}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 22, background: th.line, borderRadius: 8, padding: '6px 40px', fontSize: 70, letterSpacing: '.22em' }}>
-        STARTING SOON
-        <span style={{ display: 'inline-flex', gap: 8 }}>{[0, 1, 2].map((i) => <i key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', animation: `lsDot 1.4s ${i * 0.2}s infinite` }} />)}</span>
+      {info.logo && <img src={info.logo} alt="" style={{ height: 230, maxWidth: 460, objectFit: 'contain', animation: 'lsBreath 3.2s ease-in-out infinite' }} />}
+      <div style={{ fontSize: 84, letterSpacing: '.1em', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1 }}>{info.tournament || 'Tournament'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, background: th.line, borderRadius: 8, padding: '4px 40px', fontSize: 60, letterSpacing: '.22em' }}>
+        {left === 0 ? 'STARTING NOW' : 'STARTING SOON'}
+        <span style={{ display: 'inline-flex', gap: 8 }}>{[0, 1, 2].map((i) => <i key={i} style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', animation: `lsDot 1.4s ${i * 0.2}s infinite` }} />)}</span>
       </div>
-      {(info.match || info.map) && <div style={{ fontSize: 36, letterSpacing: '.3em', color: '#cfd6ea' }}>{[info.match && `MATCH ${info.match}`, info.map].filter(Boolean).join('  ·  ').toUpperCase()}</div>}
+      {left != null && left > 0 && (
+        <>
+          <div style={{ fontSize: 28, letterSpacing: '.35em', color: '#cfd6ea' }}>MATCH STARTS IN</div>
+          <div style={{ display: 'flex', gap: 18 }}>
+            {parts.map(([l, v]) => (
+              <div key={l} style={{ width: 190, textAlign: 'center', background: 'rgba(5,8,18,.78)', border: `2px solid ${th.line}`, borderRadius: 10, padding: '10px 0 8px' }}>
+                <div style={{ fontSize: 110, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{String(v).padStart(2, '0')}</div>
+                <div style={{ fontSize: 20, letterSpacing: '.3em', color: th.line, filter: 'brightness(1.5)' }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {startTxt && <div style={{ fontSize: 26, letterSpacing: '.25em', color: '#aab' }}>STARTS AT {startTxt}</div>}
+        </>
+      )}
+      {(info.match || info.map) && <div style={{ fontSize: 32, letterSpacing: '.3em', color: '#cfd6ea' }}>{[info.match && `MATCH ${info.match}`, info.map].filter(Boolean).join('  ·  ').toUpperCase()}</div>}
     </div>
   )
 }
@@ -102,17 +130,26 @@ const heading = (th, info, title, sub, small) => (
 /** 4. Live scoreboard — same look as the A4 "Current standings" page. */
 export function StandingsScene({ state, mode, theme, title }) {
   const th = themeOf(theme)
-  const rows = computeRows(state, mode)
+  const overall = state?.board === 'overall'
+  const rows = computeRows(state, mode, overall ? 'overall' : 'match')
   const info = state?.info || {}
   const leader = rows[0]
   const base = (leader?.players || []).filter((p) => p.photo).slice(0, 6)
   const ORD = { 6: [6, 3, 1, 2, 4, 5], 5: [4, 3, 1, 2, 5], 4: [3, 1, 2, 4], 3: [3, 1, 2], 2: [1, 2], 1: [1] }
   const squad = (ORD[base.length] || []).map((n) => base[n - 1]).filter(Boolean)
   const mid = (squad.length - 1) / 2
-  const n = Math.max(rows.length, 1)
-  const rowH = Math.min(17, 150 / n)
-  const fs = Math.min(15, rowH * 0.85)
-  const sub = [state?.group, 'Live standings', info.match && `Match ${info.match}`, info.map].filter(Boolean).join('  ·  ')
+  // like the A4 report: at most 8 teams per page, split evenly (16 teams = 8 + 8) and flipped automatically
+  const pages = Math.max(1, Math.ceil(rows.length / 8))
+  const per = Math.ceil(rows.length / pages) || 1
+  const [tick, setTick] = useState(0)
+  useEffect(() => { if (pages < 2) return undefined; const t = setInterval(() => setTick((x) => x + 1), 9000); return () => clearInterval(t) }, [pages])
+  const manual = state?.boardPage != null && state.boardPage !== 'auto' ? Number(state.boardPage) : null
+  const pg = pages < 2 ? 0 : manual != null && manual >= 0 && manual < pages ? manual : tick % pages
+  const pageRows = rows.slice(pg * per, pg * per + per)
+  const n = Math.max(pageRows.length, 1)
+  const rowH = 17
+  const fs = 15
+  const sub = [state?.group, overall ? 'Overall standings' : 'Live standings', info.match && `Match ${info.match}`, info.map].filter(Boolean).join('  ·  ')
   const cols = '6mm 13mm 1fr 14mm 22mm 18mm 24mm'
   const num = { textAlign: 'center' }
   return (
@@ -149,9 +186,10 @@ export function StandingsScene({ state, mode, theme, title }) {
             <span style={{ ...num, display: 'flex', justifyContent: 'center' }}><Chicken w="5mm" /></span>
             <span style={num}>Place pts</span><span style={num}>Elims</span><span style={num}>Total pts</span>
           </div>
-          <div style={{ position: 'relative', height: `${n * rowH}mm` }}>
-            {rows.map((r) => (
-              <div key={r.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: `${rowH}mm`, transform: `translateY(${(r.rank - 1) * rowH}mm)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1), opacity 1.2s', display: 'grid', gridTemplateColumns: cols, alignItems: 'center', padding: '0 3mm', borderTop: '0.3mm solid rgba(255,255,255,.18)', background: r.rank === 1 ? `${th.line}33` : r.rank % 2 === 0 ? 'rgba(0,0,0,.18)' : 'transparent', fontSize: `${fs}pt`, opacity: r.alive ? 1 : 0.4 }}>
+          <div key={pg} style={{ position: 'relative', height: `${n * rowH}mm`, animation: pages > 1 ? 'lsPage .6s ease-out' : 'none' }}>
+            <style>{`@keyframes lsPage{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}`}</style>
+            {pageRows.map((r, idx) => (
+              <div key={r.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: `${rowH}mm`, transform: `translateY(${idx * rowH}mm)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1), opacity 1.2s', display: 'grid', gridTemplateColumns: cols, alignItems: 'center', padding: '0 3mm', borderTop: '0.3mm solid rgba(255,255,255,.18)', background: r.rank === 1 ? `${th.line}33` : r.rank % 2 === 0 ? 'rgba(0,0,0,.18)' : 'transparent', fontSize: `${fs}pt`, opacity: r.alive ? 1 : 0.4 }}>
                 <span />
                 <span style={{ fontSize: `${fs * 1.13}pt` }}>#{r.rank}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3mm', minWidth: 0 }}>
@@ -159,7 +197,7 @@ export function StandingsScene({ state, mode, theme, title }) {
                   <Flag code={r.country} h={`${Math.min(6, rowH * 0.35)}mm`} />
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase', letterSpacing: '.03em' }}>{r.tag || r.name}</span>
                 </span>
-                <span style={num}>{r.placement === 1 ? 1 : 0}</span>
+                <span style={num}>{r.wwcd}</span>
                 <span style={num}>{r.pp}</span>
                 <span style={num}>{r.kills}</span>
                 <span style={{ ...num, fontSize: `${fs * 1.2}pt` }}>{r.tp}</span>
@@ -168,6 +206,7 @@ export function StandingsScene({ state, mode, theme, title }) {
           </div>
         </div>
       </div>
+      {pages > 1 && <div style={{ position: 'absolute', left: '48%', right: '4%', bottom: '6mm', fontSize: '9pt', letterSpacing: '.15em', textTransform: 'uppercase', opacity: 0.9 }}>Page {pg + 1} / {pages}</div>}
     </A4Frame>
   )
 }

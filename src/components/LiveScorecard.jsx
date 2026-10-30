@@ -5,12 +5,12 @@ import Flag from './Flag'
 const ROW_DEFAULT = 46 // px
 
 /** Animated live scorecard: rows slide to their new position when the ranking changes, numbers flash when points change. */
-export default function LiveScorecard({ title, state, mode, theme = 'blue', width = 560, onEliminate, rowH, hideInfo }) {
+export default function LiveScorecard({ title, state, mode, theme = 'blue', width = 560, onEliminate, rowH, hideInfo, view = 'match' }) {
   const ROW = rowH || ROW_DEFAULT
   const cb = useRef(onEliminate)
   cb.current = onEliminate
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
-  const rows = computeRows(state, mode)
+  const rows = computeRows(state, mode, view)
   const prev = useRef({})            // id -> { rank, tp, kills }
   const [fx, setFx] = useState({})   // id -> { pts, kills, up, down }
   const first = useRef(true)
@@ -23,20 +23,21 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
       const p = prev.current[r.id]
       if (p && !first.current) {
         const c = {}
-        if (p.alive && !r.alive) { c.elim = true; outs.push(r) }
+        if (!p.winner && r.winner) { c.elim = true; outs.push({ ...r, win: true }) }
+        else if (p.alive && !r.alive && !r.winner) { c.elim = true; outs.push(r) }
         if (r.tp !== p.tp) c.pts = true
         if (r.kills !== p.kills) c.kills = true
         if (r.rank < p.rank) c.up = true
         if (r.rank > p.rank) c.down = true
         if (Object.keys(c).length) changes[r.id] = c
       }
-      next[r.id] = { rank: r.rank, tp: r.tp, kills: r.kills, alive: r.alive }
+      next[r.id] = { rank: r.rank, tp: r.tp, kills: r.kills, alive: r.alive, winner: r.winner }
     })
     prev.current = next
     first.current = false
     if (Object.keys(changes).length) {
       setFx((o) => ({ ...o, ...changes }))
-      outs.forEach((r) => cb.current && cb.current({ id: r.id, name: r.name, tag: r.tag, logo: r.logo, country: r.country, placement: r.placement, kills: r.kills, points: r.tp }))
+      outs.forEach((r) => cb.current && cb.current({ id: r.id, name: r.name, tag: r.tag, logo: r.logo, country: r.country, placement: r.placement, kills: r.mkills, points: r.mtp, win: r.win }))
       setTimeout(() => setFx((o) => { const n = { ...o }; Object.keys(changes).forEach((k) => { delete n[k] }); return n }), 3200)
     }
   }, [JSON.stringify(rows.map((r) => [r.id, r.rank, r.tp, r.kills, r.alive, r.placement]))]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -68,6 +69,7 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', animation: 'lsPulse 1.2s infinite' }} />LIVE
         </span>
         <span style={{ fontSize: 22, letterSpacing: '.06em', textTransform: 'uppercase', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+        {view === 'overall' && <span style={{ fontSize: 13, letterSpacing: '.14em', background: 'rgba(255,255,255,.18)', borderRadius: 4, padding: '1px 8px' }}>OVERALL</span>}
         <span style={{ fontSize: 15, letterSpacing: '.1em', opacity: 0.9 }}>{alive} ALIVE</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', background: '#0a101c', padding: '4px 14px 4px 0', fontSize: 14, letterSpacing: '.12em', color: '#aab', textAlign: 'center' }}>
@@ -76,11 +78,11 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
       <div style={{ position: 'relative', height: rows.length * ROW, background: '#0d1524', overflow: 'hidden' }}>
         {rows.map((r) => {
           const f = fx[r.id] || {}
-          const fade = { opacity: r.alive || f.elim ? 1 : 0.3, filter: r.alive || f.elim ? 'none' : 'grayscale(1)', transition: 'opacity 1.4s ease 0.2s, filter 1.4s ease 0.2s' }
+          const fade = { opacity: r.alive || r.winner || f.elim ? 1 : 0.3, filter: r.alive || r.winner || f.elim ? 'none' : 'grayscale(1)', transition: 'opacity 1.4s ease 0.2s, filter 1.4s ease 0.2s' }
           return (
             <div key={r.id} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: ROW, transform: `translateY(${(r.rank - 1) * ROW}px)`, transition: 'transform .8s cubic-bezier(.22,1,.36,1)', borderTop: '1px solid rgba(255,255,255,.08)', background: r.rank === 1 ? `linear-gradient(${th.line}40,${th.line}40), #101a2c` : r.rank % 2 ? '#101a2c' : '#0d1524', overflow: 'hidden' }}>
               <div className={f.elim ? 'ls-shake' : f.pts ? 'ls-glow' : ''} style={{ height: '100%', display: 'grid', gridTemplateColumns: '44px 1fr 74px 56px 62px', alignItems: 'center', padding: '0 14px 0 0' }}>
-              {f.elim && <div style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(90deg,#7f0a0a,#d90429 50%,#7f0a0a)', animation: 'lsElim 3s ease-in-out forwards', fontSize: 26, letterSpacing: '.18em' }}>ELIMINATED<span style={{ background: '#fff', color: '#b00020', borderRadius: 4, padding: '0 8px' }}>#{r.placement}</span></div>}
+              {f.elim && <div style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: r.winner ? 'linear-gradient(90deg,#8a6200,#f5b301 50%,#8a6200)' : 'linear-gradient(90deg,#7f0a0a,#d90429 50%,#7f0a0a)', animation: 'lsElim 3s ease-in-out forwards', fontSize: 26, letterSpacing: '.18em', color: r.winner ? '#111' : '#fff' }}>{r.winner ? 'WINNER WINNER CHICKEN DINNER' : <>ELIMINATED<span style={{ background: '#fff', color: '#b00020', borderRadius: 4, padding: '0 8px' }}>#{r.placement}</span></>}</div>}
               <div style={{ textAlign: 'center', fontSize: 24, color: r.rank <= 3 ? '#fff' : '#cfd3e0', position: 'relative' }}>
                 {r.rank}
                 {f.up && <span style={{ position: 'absolute', left: 3, top: 3, fontSize: 10, color: '#22c55e' }}>▲</span>}
@@ -92,7 +94,7 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
                 </span>
                 <Flag code={r.country} h="12px" />
                 <span style={{ fontSize: 22, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.tag || r.name}</span>
-                {!r.alive && <span style={{ fontSize: 13, letterSpacing: '.08em', color: '#ef4444', flexShrink: 0 }}>#{r.placement} OUT</span>}
+                {r.winner ? <span style={{ fontSize: 13, letterSpacing: '.08em', color: '#f5b301', flexShrink: 0 }}>WWCD</span> : !r.alive && <span style={{ fontSize: 13, letterSpacing: '.08em', color: '#ef4444', flexShrink: 0 }}>#{r.placement} OUT</span>}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 3, ...fade }}>
                 {[0, 1, 2, 3].map((i) => { const c = r.alive ? ((r.pl || [])[i] || 'a') : 'd'; return <i key={i} style={{ width: 8, height: 22, borderRadius: 1, background: c === 'a' ? '#22c55e' : c === 'k' ? '#ef4444' : '#5b6270', transition: 'background .4s' }} /> })}
@@ -112,6 +114,13 @@ export default function LiveScorecard({ title, state, mode, theme = 'blue', widt
 }
 
 /** Wide "eliminated stat" bar (top-centre of the broadcast layout), shown for a few seconds when a team is eliminated. */
+function Chicken({ w = '40px', dark }) {
+  return (
+    <svg viewBox="0 0 64 40" style={{ width: w, height: `calc(${w} / 1.6)`, display: 'block' }} fill={dark ? '#111' : '#fff'}>
+      <rect x="2" y="34" width="60" height="5" rx="2.5" /><path d="M8 33 C6 21 16 13 28 14 C40 15 49 23 49 33 Z" /><path d="M44 21 L55 9 a3.2 3.2 0 1 1 4.5 4.5 L48 25 Z" /><path d="M13 22 L6 15 a3 3 0 1 0 -4.2 4.2 L10 27 Z" />
+    </svg>
+  )
+}
 export function EliminationPopup({ item, theme = 'blue', top = 80 }) {
   const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
   if (!item) return null
@@ -136,10 +145,18 @@ export function EliminationPopup({ item, theme = 'blue', top = 80 }) {
         }
       `}</style>
       <div style={{ transform: 'scale(.6)', transformOrigin: 'top center', display: 'flex', alignItems: 'stretch', background: '#0a101c', border: `2px solid ${th.line}`, borderRadius: 8, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.6)' }}>
-        <div style={{ background: 'linear-gradient(180deg,#d90429,#7f0a0a)', padding: '0 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: 150 }}>
-          <span style={{ fontSize: 16, letterSpacing: '.22em' }}>ELIMINATED</span>
-          <span style={{ fontSize: 54, lineHeight: 1 }}>#{item.placement}</span>
-        </div>
+        {item.win ? (
+          <div style={{ background: 'linear-gradient(180deg,#f5b301,#8a6200)', color: '#111', padding: '0 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: 190, gap: 2 }}>
+            <Chicken w="54px" dark />
+            <span style={{ fontSize: 20, letterSpacing: '.16em', lineHeight: 1 }}>WINNER WINNER</span>
+            <span style={{ fontSize: 20, letterSpacing: '.16em', lineHeight: 1 }}>CHICKEN DINNER</span>
+          </div>
+        ) : (
+          <div style={{ background: 'linear-gradient(180deg,#d90429,#7f0a0a)', padding: '0 22px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minWidth: 150 }}>
+            <span style={{ fontSize: 16, letterSpacing: '.22em' }}>ELIMINATED</span>
+            <span style={{ fontSize: 54, lineHeight: 1 }}>#{item.placement}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', flex: 1, minWidth: 0 }}>
           <span style={{ width: 84, height: 84, borderRadius: '50%', background: '#fff', border: `3px solid ${th.line}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
             {item.logo ? <img src={item.logo} alt="" style={{ width: '88%', height: '88%', objectFit: 'contain' }} /> : <span style={{ color: '#111', fontSize: 30 }}>{String(item.tag || item.name).slice(0, 2)}</span>}
@@ -157,12 +174,14 @@ export function EliminationPopup({ item, theme = 'blue', top = 80 }) {
   )
 }
 
-const HELMET = { a: '#22b25a', k: '#e5384f', d: '#0b0b0b' }
+const HELMET = { a: '#22b25a', k: '#e5384f', d: '#3a3f4c' }
 function Helmet({ c }) {
+  const col = HELMET[c] || HELMET.a
   return (
-    <svg width="44" height="40" viewBox="0 0 44 40" style={{ transition: 'fill .4s' }}>
-      <path d="M3 24C3 11 11 3 23 3c11 0 18 8 18 19v5c0 2-1 3-3 3H29c-2 0-3-1-4-3l-1-2c-1-2-3-2-4 0l-2 3c-1 2-3 2-5 2H6c-2 0-3-1-3-3z" fill={HELMET[c] || HELMET.a} />
-      <path d="M14 15c2-4 6-6 10-6" stroke="#fff" strokeOpacity=".35" strokeWidth="2" fill="none" strokeLinecap="round" />
+    <svg width="40" height="34" viewBox="0 0 44 38" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M5 26C5 11 13 3 22 3s17 8 17 23z" fill={col} style={{ transition: 'fill .4s' }} />
+      <path d="M3 26h38v3c0 3-2 5-5 5H8c-3 0-5-2-5-5z" fill={col} style={{ transition: 'fill .4s' }} />
+      <path d="M12 14c2-4 6-6 10-6" stroke="#fff" strokeOpacity=".4" strokeWidth="2.2" fill="none" strokeLinecap="round" />
     </svg>
   )
 }
@@ -188,11 +207,11 @@ export function FinalFour({ rows, theme = 'blue' }) {
               {r.logo ? <img src={r.logo} alt="" style={{ width: '86%', height: '86%', objectFit: 'contain' }} /> : <span style={{ color: '#111', fontSize: 16 }}>{String(r.tag || r.name).slice(0, 2)}</span>}
             </span>
             {!r.logo && <span style={{ fontSize: 20, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{r.tag || r.name}</span>}
-            <span style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>{[0, 1, 2, 3].map((k) => <Helmet key={k} c={(r.pl || [])[k] || 'a'} />)}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>{[0, 1, 2, 3].map((k) => <Helmet key={k} c={(r.pl || [])[k] || 'a'} />)}</span>
           </div>
-          <div style={{ background: th.block, display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 10, padding: '2px 0' }}>
-            <span style={{ fontSize: 14, letterSpacing: '.2em', opacity: 0.85 }}>KILLS</span>
-            <span style={{ fontSize: 32, lineHeight: 1.1 }}>{r.kills}</span>
+          <div style={{ background: th.block, display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 8, padding: '1px 0' }}>
+            <span style={{ fontSize: 12, letterSpacing: '.2em', opacity: 0.85 }}>KILLS</span>
+            <span style={{ fontSize: 22, lineHeight: 1.15 }}>{r.kills}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '4px 0 6px', fontSize: 24 }}>
             <span style={{ letterSpacing: '.1em' }}>WWCD</span><span style={{ width: 2, height: 22, background: th.line }} /><span>{sh[i].toFixed(1)}%</span>

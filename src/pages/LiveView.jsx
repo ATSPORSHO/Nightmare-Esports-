@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LiveScorecard, { EliminationPopup, FinalFour } from '../components/LiveScorecard'
-import { LIVE_THEMES, computeRows } from '../lib/live'
+import { LIVE_THEMES, WWCD_THEMES, computeRows } from '../lib/live'
 import { StartingScene, TeamsScene, H2HScene, MvpScene, StandingsScene, stageBg } from '../components/LiveScenes'
 
 /** Public live page (no menu). Use this link as a Browser Source in OBS, or open it in any browser. ?theme=green|blue|red  ?bg=dark */
@@ -24,6 +24,7 @@ export default function LiveView() {
   const onElim = useCallback((it) => { queue.current.push(it); if (!playing.current) next() }, [next])
   const [scale, setScale] = useState(1)
   const lastFinal = useRef([])
+  const wref = useRef(null)
 
   // the whole layout is drawn on a 1920x1080 stage and scaled to fit the window / OBS source
   useEffect(() => {
@@ -39,11 +40,21 @@ export default function LiveView() {
       const { data: d, error } = await supabase.rpc('broadcast_state', { p_id: id })
       if (!alive) return
       if (!error) setData(d || null)
-      timer.current = setTimeout(load, 1500)
+      timer.current = setTimeout(load, 700)
     }
     load()
     return () => { alive = false; clearTimeout(timer.current) }
   }, [id])
+
+  // WWCD video: loops full screen from the moment the controls start it until they stop it
+  const wOn = !!data?.state?.wwcd?.on
+  const wKey = data?.state?.wwcd?.key
+  useEffect(() => {
+    const v = wref.current
+    if (!wOn || !v) return
+    v.muted = false
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}) })
+  }, [wOn, wKey])
 
   if (data === undefined) return null
   if (data === null) return <div style={{ padding: 24, color: '#fff', fontFamily: 'sans-serif', textShadow: '0 1px 3px #000' }}>This broadcast has ended.</div>
@@ -52,7 +63,7 @@ export default function LiveView() {
   const n = (data.state?.teams || []).length || 1
   const SB_TOP = 20, SB_H = 1080 - 20 - SB_TOP
   const rowH = Math.max(26, Math.min(46, Math.floor((SB_H - 104) / n)))
-  const allRows = computeRows(data.state, data.mode)
+  const allRows = computeRows(data.state, data.mode, 'match')
   const aliveRows = allRows.filter((r) => r.alive)
   const final4 = allRows.length > 4 && aliveRows.length > 0 && aliveRows.length <= 4
   if (final4) lastFinal.current = aliveRows
@@ -65,7 +76,7 @@ export default function LiveView() {
       <div style={layer(scene === 'live', false)}>
       {/* right: live scoreboard */}
       <div style={{ position: 'absolute', right: 20, top: SB_TOP, transform: final4 ? 'translateX(135%)' : 'none', transition: 'transform .9s cubic-bezier(.65,0,.35,1)' }}>
-        <LiveScorecard title={data.title} state={data.state} mode={data.mode} theme={theme} width={540} rowH={rowH} hideInfo onEliminate={onElim} />
+        <LiveScorecard title={data.title} state={data.state} mode={data.mode} theme={theme} width={540} rowH={rowH} hideInfo view={data.state?.board || 'match'} onEliminate={onElim} />
       </div>
       {/* bottom-left: live match overlay */}
       {(info.tournament || info.match || info.map) && (
@@ -88,6 +99,8 @@ export default function LiveView() {
       <div style={layer(scene === 'teams', true)}><TeamsScene teams={data.state?.teams || []} info={info} theme={theme} /></div>
       <div style={layer(scene === 'scoreboard', false)}><StandingsScene state={data.state} mode={data.mode} theme={theme} title={data.title} /></div>
       <div style={layer(scene === 'h2h', false)}><H2HScene state={data.state} mode={data.mode} theme={theme} /></div>
+      <video key={wKey} ref={wref} src={`${import.meta.env.BASE_URL}wwcd.mp4`} loop playsInline preload="auto"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', background: '#000', zIndex: 100, filter: (WWCD_THEMES[data.state?.wwcdTheme] || WWCD_THEMES.blue).filter, opacity: wOn ? 1 : 0, visibility: wOn ? 'visible' : 'hidden', transition: `opacity .5s ease, visibility 0s linear ${wOn ? '0s' : '.5s'}`, pointerEvents: 'none' }} />
       <div style={layer(scene === 'mvp', false)}><MvpScene state={data.state} theme={theme} /></div>
     </div>
   )
