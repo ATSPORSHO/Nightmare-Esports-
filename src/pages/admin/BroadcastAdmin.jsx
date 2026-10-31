@@ -157,7 +157,7 @@ function Countdown({ startAt, onSet }) {
   )
 }
 
-const SCENES = [['starting', 'Starting soon'], ['teams', 'Participating teams'], ['live', 'Live match'], ['scoreboard', 'Live scoreboard'], ['h2h', 'Head to head'], ['mvp', 'MVP list']]
+const SCENES = [['starting', 'Starting soon'], ['teams', 'Participating teams'], ['live', 'Live match'], ['scoreboard', 'Live scoreboard'], ['h2h', 'Head to head'], ['mvp', 'MVP list'], ['wwcdstats', 'WWCD team stats']]
 
 function PlayersPanel({ team, onAdd, onEdit, onDel }) {
   const [nm, setNm] = useState('')
@@ -393,13 +393,13 @@ function Control({ session, onClose, onEnded }) {
             ))}
           </div>
         )}
-        {st.teams.some((t) => Number(t.placement) === 1) || alive === 1 ? (
-          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-ink-700 bg-ink-950 p-3 text-xs">
-            <span className="font-semibold uppercase tracking-wider text-slate-400">🏆 WWCD team stats (winner's player kills of this match)</span>
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-ink-700 bg-ink-950 p-3 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-slate-400">🏆 WWCD team stats (winner's player kills of this match)</span>
+          {st.teams.some((t) => Number(t.placement) === 1) || alive === 1 ? (
             <button className={`rounded-lg border px-3 py-1 text-sm font-semibold ${st.wstatsHide ? 'border-ink-600 text-slate-300 hover:bg-ink-700' : 'border-red-500 bg-red-600 text-white'}`} onClick={() => update((o) => ({ ...o, wstatsHide: !o.wstatsHide }), 30)}>{st.wstatsHide ? 'Show on stream' : 'ON AIR — click to hide'}</button>
-            <span className="text-slate-500">Shown automatically when a team wins (Live match scene). Cleared when you reset / upload.</span>
-          </div>
-        ) : null}
+          ) : <span className="rounded border border-ink-600 px-2 py-1 text-slate-400">Waiting for a winner</span>}
+          <span className="text-slate-500">Appears by itself on the Live match scene when a team wins (needs player names in each team's Players panel). You can also press the scene button “WWCD team stats” above to show it any time. Cleared on reset / upload.</span>
+        </div>
         <p className="mt-2 text-[11px] text-slate-500">Open <b>Players</b> on a team below to add names and count player kills. Player kills never change the live scoreboard — they only feed Head to head and the MVP list (and the MVP report when you upload the result).</p>
       </div>
       {askReset && (

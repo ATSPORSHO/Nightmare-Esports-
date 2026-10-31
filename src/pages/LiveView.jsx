@@ -68,8 +68,11 @@ export default function LiveView() {
   const allRows = computeRows(data.state, data.mode, 'match')
   const aliveRows = allRows.filter((r) => r.alive)
   const winRow = allRows.find((r) => r.winner)
-  const showStats = !!winRow && scene0 === 'live' && !data.state?.wstatsHide
-  if (winRow) lastWin.current = winRow
+  // WWCD team stats: automatically when a team wins (Live match scene), or any time from the "WWCD team stats" scene button
+  const manualStats = scene0 === 'wwcdstats'
+  const statsRow = winRow || (manualStats ? allRows[0] : null)
+  const showStats = manualStats || (!!winRow && scene0 === 'live' && !data.state?.wstatsHide)
+  if (statsRow) lastWin.current = statsRow
   const final4 = allRows.length > 4 && aliveRows.length > 0 && aliveRows.length <= 4
   if (final4) lastFinal.current = aliveRows
   const font = "'Bebas Neue','Oswald','Arial Narrow',Impact,sans-serif"
