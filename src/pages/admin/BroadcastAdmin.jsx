@@ -126,14 +126,16 @@ function EnterNum({ value, onCommit, className = '', ...rest }) {
 
 /** Match overlay: tournament name + logo, match number, map. Sent to the live scoreboard when you press Apply. */
 function InfoEditor({ info, onApply }) {
-  const [d, setD] = useState({ tournament: '', logo: '', match: '', map: '', ...info })
-  const dirty = JSON.stringify({ tournament: '', logo: '', match: '', map: '', ...info }) !== JSON.stringify(d)
+  const [d, setD] = useState({ tournament: '', stage: '', total: '', logo: '', match: '', map: '', ...info })
+  const dirty = JSON.stringify({ tournament: '', stage: '', total: '', logo: '', match: '', map: '', ...info }) !== JSON.stringify(d)
   return (
     <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Match overlay (shown above the scorecard)</div>
-      <div className="grid gap-3 md:grid-cols-[1fr_110px_1fr_200px]">
+      <div className="grid gap-3 md:grid-cols-[1fr_1fr_90px_90px_1fr_200px]">
         <Field label="Tournament name"><input className="input" value={d.tournament} onChange={(e) => setD({ ...d, tournament: e.target.value })} /></Field>
+        <Field label="Title on overlay (e.g. Grand Final)"><input className="input" value={d.stage} onChange={(e) => setD({ ...d, stage: e.target.value })} placeholder="Grand Final" /></Field>
         <Field label="Match no."><input className="input" value={d.match} onChange={(e) => setD({ ...d, match: e.target.value })} /></Field>
+        <Field label="Of total"><input className="input" value={d.total} onChange={(e) => setD({ ...d, total: e.target.value })} placeholder="16" /></Field>
         <Field label="Map name"><input className="input" list="bc-maps" value={d.map} onChange={(e) => setD({ ...d, map: e.target.value })} placeholder="Erangel" /><datalist id="bc-maps">{['Erangel', 'Miramar', 'Rondo', 'Sanhok', 'Vikendi', 'Livik', 'Karakin'].map((m) => <option key={m} value={m} />)}</datalist></Field>
         <ImageField label="Tournament logo" folder="tournament" value={d.logo || null} onChange={(v) => setD({ ...d, logo: v || '' })} />
       </div>
@@ -226,7 +228,34 @@ function Control({ session, onClose, onEnded }) {
     const base = { ...o, history: h, teams: o.teams.map((t) => (t.id === last ? { ...t, placement: null, pl: ['a', 'a', 'a', 'a'] } : t)) }
     return Number(undone?.placement) === 2 ? wwcdOff(base) : base
   })
-  const reset = () => { if (window.confirm('Reset kills, eliminations and adjustments for all teams?')) update((o) => wwcdOff({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, kills: 0 })) })) })) }
+  const [askReset, setAskReset] = useState(false)
+  const addT = (a, b) => ({ pp: (Number(a?.pp) || 0) + (Number(b?.pp) || 0), kills: (Number(a?.kills) || 0) + (Number(b?.kills) || 0), wwcd: (Number(a?.wwcd) || 0) + (Number(b?.wwcd) || 0), mp: (Number(a?.mp) || 0) + (Number(b?.mp) || 0) })
+  /** Reset the match. save = true: this match's points/kills are first added to the overall leaderboard of the live stream (earlier points are never touched). */
+  const doReset = (save) => {
+    setAskReset(false)
+    update((o) => {
+      // final placements of this match (teams still alive get the best places, ordered by kills)
+      const ts = o.teams.map((t) => ({ ...t, kills: Number(t.kills) || 0 }))
+      ts.filter((t) => t.placement == null || t.placement === '').sort((a, b) => b.kills - a.kills).forEach((t, i) => { t.placement = i + 1 })
+      const used = ts.map((t) => Number(t.placement))
+      if (new Set(used).size !== used.length) [...ts].sort((a, b) => a.placement - b.placement || b.kills - a.kills).forEach((t, i) => { t.placement = i + 1 })
+      const fin = Object.fromEntries(ts.map((t) => [t.id, t]))
+      return wwcdOff({
+        ...o, history: [], wstatsHide: false, board: save ? 'overall' : o.board,
+        info: save ? { ...(o.info || {}), match: String((Number(o.info?.match) || 0) + 1) } : o.info,
+        teams: o.teams.map((t) => {
+          const f = fin[t.id]
+          const add = save ? { pp: placementPoints(f.placement), kills: f.kills, wwcd: Number(f.placement) === 1 ? 1 : 0, mp: 1 } : null
+          return {
+            ...t, base: add ? addT(t.base, add) : t.base, xtra: add ? addT(t.xtra, add) : t.xtra,
+            kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'],
+            players: (t.players || []).map((p) => ({ ...p, total: save ? (Number(p.total) || 0) + (Number(p.kills) || 0) : p.total, kills: 0 })),
+          }
+        }),
+      })
+    })
+  }
+  const reset = () => (active ? setAskReset(true) : doReset(false))
   const setMd = (m) => { setMode(m); push() }
   const setTh = (t) => { setTheme(t); push() }
   const link = linkOf(session.id, theme)
@@ -282,7 +311,7 @@ function Control({ session, onClose, onEnded }) {
     return number
   }
 
-  const blank = (o, nextMatch) => wwcdOff({ ...o, history: [], teams: o.teams.map((t) => ({ ...t, base: baseRef.current[t.id] || t.base, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, total: (Number(p.total) || 0) + (Number(p.kills) || 0), kills: 0 })) })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
+  const blank = (o, nextMatch) => wwcdOff({ ...o, history: [], wstatsHide: false, teams: o.teams.map((t) => ({ ...t, base: baseRef.current[t.id] ? addT(baseRef.current[t.id], t.xtra) : t.base, kills: 0, placement: null, adj: 0, pl: ['a', 'a', 'a', 'a'], players: (t.players || []).map((p) => ({ ...p, total: (Number(p.total) || 0) + (Number(p.kills) || 0), kills: 0 })) })), info: nextMatch ? { ...(o.info || {}), match: String(nextMatch) } : o.info })
 
   /** save this match to Results, then clear the scoreboard ready for the next match (broadcast stays live) */
   const upload = async () => {
@@ -364,8 +393,28 @@ function Control({ session, onClose, onEnded }) {
             ))}
           </div>
         )}
+        {st.teams.some((t) => Number(t.placement) === 1) || alive === 1 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-ink-700 bg-ink-950 p-3 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-slate-400">🏆 WWCD team stats (winner's player kills of this match)</span>
+            <button className={`rounded-lg border px-3 py-1 text-sm font-semibold ${st.wstatsHide ? 'border-ink-600 text-slate-300 hover:bg-ink-700' : 'border-red-500 bg-red-600 text-white'}`} onClick={() => update((o) => ({ ...o, wstatsHide: !o.wstatsHide }), 30)}>{st.wstatsHide ? 'Show on stream' : 'ON AIR — click to hide'}</button>
+            <span className="text-slate-500">Shown automatically when a team wins (Live match scene). Cleared when you reset / upload.</span>
+          </div>
+        ) : null}
         <p className="mt-2 text-[11px] text-slate-500">Open <b>Players</b> on a team below to add names and count player kills. Player kills never change the live scoreboard — they only feed Head to head and the MVP list (and the MVP report when you upload the result).</p>
       </div>
+      {askReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setAskReset(false)}>
+          <div className="w-full max-w-md rounded-xl border border-ink-700 bg-ink-900 p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white">Save this match in the overall leaderboard?</h3>
+            <p className="mt-2 text-sm text-slate-400">The kills, placement points and eliminations of this match will be added to the overall leaderboard of the live stream. Points from earlier matches are never removed.</p>
+            <div className="mt-4 grid gap-2">
+              <button className="btn-primary" onClick={() => doReset(true)}>Yes — save in overall leaderboard, then reset</button>
+              <button className="btn-ghost" onClick={() => doReset(false)}>No — reset without saving this match</button>
+              <button className="btn-ghost" onClick={() => setAskReset(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <InfoEditor key={JSON.stringify(st.info || {})} info={st.info || {}} onApply={(info) => update((o) => ({ ...o, info }))} />
       <div className="grid gap-4 xl:grid-cols-[1fr_580px]">
         <div className="rounded-xl border border-ink-700">
@@ -373,7 +422,7 @@ function Control({ session, onClose, onEnded }) {
             <span>{alive} of {st.teams.length} alive</span>
             <span className="ml-auto flex gap-2">
               {mode === 'auto' && <button className="btn-ghost btn-sm" onClick={undo} disabled={!(st.history || []).length}><Undo2 size={13} /> Undo last elimination</button>}
-              <button className="btn-ghost btn-sm" onClick={reset} title="Set every team back to alive with 0 kills (nothing is saved)"><RotateCcw size={13} /> Reset kills & alive teams</button>
+              <button className="btn-ghost btn-sm" onClick={reset} title="Set every team back to alive with 0 kills — asks whether to add this match to the overall leaderboard"><RotateCcw size={13} /> Reset kills & alive teams</button>
               <button className="btn-primary btn-sm" disabled={busy} onClick={upload} title="Save this match to Results / A4 report, then reset for the next match"><Upload size={13} /> Upload result</button>
             </span>
           </div>
@@ -417,7 +466,7 @@ function Control({ session, onClose, onEnded }) {
         </div>
         <div className="rounded-xl border border-ink-700 bg-ink-950 p-3">
           <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Preview (what viewers see)</div>
-          <div className="overflow-x-auto"><LiveScorecard title={session.title} state={st} mode={mode} theme={theme} width={540} view={st.board || 'match'} /></div>
+          <div className="overflow-x-auto"><LiveScorecard title={session.title} state={st} mode={mode} theme={theme} width={430} view={st.board || 'match'} /></div>
         </div>
       </div>
     </div>

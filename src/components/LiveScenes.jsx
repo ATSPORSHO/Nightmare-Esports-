@@ -305,3 +305,42 @@ export function H2HScene({ state, mode, theme }) {
     </A4Frame>
   )
 }
+
+/** WWCD team stats: shown after the winning team is known — the winner's players with their kills of THIS match only (they reset with the match). */
+export function WwcdStatsScene({ row, info = {}, theme }) {
+  const th = LIVE_THEMES[theme] || LIVE_THEMES.blue
+  if (!row) return null
+  const pl = (row.players || []).filter((p) => p.name).slice(0, 4)
+  const W = 1500
+  const cardW = pl.length ? Math.min(330, Math.floor((W - 330) / pl.length)) : 0
+  return (
+    <div style={{ position: 'absolute', inset: 0, fontFamily: FONT, color: '#fff' }}>
+      <div style={{ textAlign: 'center', paddingTop: 56 }}>
+        <div style={{ fontSize: 130, letterSpacing: '.06em', lineHeight: 1, textTransform: 'uppercase' }}>WWCD team stats</div>
+        <div style={{ fontSize: 38, letterSpacing: '.2em', color: th.line, filter: 'brightness(1.6)', marginTop: 6, textTransform: 'uppercase' }}>{subOf(info)}</div>
+        <div style={{ width: 220, height: 5, background: th.line, margin: '14px auto 0', borderRadius: 3 }} />
+      </div>
+      <div style={{ position: 'absolute', left: (1920 - (330 + cardW * pl.length)) / 2, top: 340, display: 'flex', boxShadow: '0 20px 60px rgba(0,0,0,.55)', border: `3px solid ${th.line}`, background: '#070b16' }}>
+        <div style={{ width: 330, height: 580, background: `linear-gradient(180deg,${th.block},#070b16)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 18, right: 18 }}><Flag code={row.country} h="30px" /></div>
+          {row.logo ? <img src={row.logo} alt="" style={{ width: 220, height: 220, objectFit: 'contain' }} /> : <Logo r={row} size={200} th={th} />}
+          <div style={{ fontSize: 76, letterSpacing: '.05em', lineHeight: 1, textTransform: 'uppercase', textAlign: 'center', padding: '0 10px' }}>{row.tag || row.name}</div>
+          <div style={{ textAlign: 'center', borderTop: `2px solid ${th.line}`, paddingTop: 8, width: 220 }}>
+            <div style={{ fontSize: 22, letterSpacing: '.25em', color: '#cfd6ea' }}>TEAM ELIMS</div>
+            <div style={{ fontSize: 72, lineHeight: 1 }}>{row.mkills}</div>
+          </div>
+        </div>
+        {pl.map((p) => (
+          <div key={p.key} style={{ width: cardW, height: 580, position: 'relative', overflow: 'hidden', background: `linear-gradient(180deg,${th.block}cc,#0b1226)`, borderLeft: '1px solid rgba(255,255,255,.18)' }}>
+            {p.photo && <img src={p.photo} alt="" style={{ position: 'absolute', right: 0, top: 0, bottom: 70, width: '66%', height: 'calc(100% - 70px)', objectFit: 'cover', objectPosition: 'center top' }} />}
+            <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1 }}>
+              <div style={{ fontSize: 54, lineHeight: 1, textShadow: '0 2px 10px rgba(0,0,0,.8)' }}>{Number(p.kills) || 0}</div>
+              <div style={{ fontSize: 20, letterSpacing: '.06em', textShadow: '0 2px 8px rgba(0,0,0,.8)' }}>ELIMS</div>
+            </div>
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 70, background: '#dbe7ff', color: '#16307a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, letterSpacing: '.03em', textTransform: 'uppercase', padding: '0 8px' }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{row.tag ? `${row.tag} ${p.name}` : p.name}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
